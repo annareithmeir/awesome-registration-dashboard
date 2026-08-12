@@ -1,4 +1,6 @@
-# Medical Image Registration Viewer
+![Medical Image Registration Dashboard](app-screenshot.png)
+
+# Medical Image Registration Dashboard
 
 A local desktop web app for visualizing 2D/3D medical images, displacement fields, and registration metrics.
 
