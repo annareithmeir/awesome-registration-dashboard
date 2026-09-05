@@ -1,6 +1,9 @@
-- add register with unigrad, choose sim (for multimodal)
+- add register with unigrad, choose sim (for multimodal), convexadam, demons simpleitk, syn, elastix
 - add zoom
 - correct metrics, atm they are just wrong
+- let user easily add own method
+-save results
+- compare across different runs
 
 ow, 10 ideas for where I'd take this next — grounded in things I actually ran into while working on it, not generic suggestions:
 
