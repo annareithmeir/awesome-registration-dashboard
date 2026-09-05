@@ -74,7 +74,6 @@ header p {
 
 .file-card,
 .button-panel,
-.overlay-control-bar,
 .panel,
 .viewer-card {
   border: 1px solid rgba(148, 171, 183, 0.14);
@@ -312,6 +311,16 @@ input[type="radio"] {
   align-items: start;
 }
 
+/* Groups a related pair (Jacobian Determinant + Log-Jacobian, Shear Index +
+   Inverse Consistency Error) into one column so they stack instead of
+   flowing independently in the auto-fit grid above. */
+.metric-column {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+}
+
 .metric-group {
   --accent: #20a79b;
   display: grid;
@@ -400,6 +409,46 @@ input[type="radio"] {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* Min/mean/max as a fixed left-center-right strip, so the three read as a
+   range at a glance instead of as same-weight pills that wrap on their
+   own. */
+.mmm-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.mmm-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 9px;
+  min-width: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.mmm-cell .stat-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mmm-min {
+  align-items: flex-start;
+  text-align: left;
+}
+
+.mmm-mean {
+  align-items: center;
+  text-align: center;
+}
+
+.mmm-max {
+  align-items: flex-end;
+  text-align: right;
 }
 
 .structure-metrics {
@@ -575,34 +624,9 @@ input[type="radio"] {
   flex-shrink: 0;
 }
 
-.overlay-control-bar {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 16px;
-  margin-bottom: 14px;
-  padding: 12px 14px;
-}
-
 label {
   color: #c7d7de;
   font-size: 0.9rem;
-}
-
-.overlay-control-bar label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-}
-
-.overlay-control-bar input[type="range"] {
-  width: min(320px, 46vw);
-}
-
-.overlay-control-bar input[type="range"]:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
 }
 
 .checkbox-control,
@@ -923,6 +947,36 @@ select {
   gap: 10px;
 }
 
+/* Sits as a plain (non-collapsing) item in the floating-corner stack,
+   above the Data/Actions buttons - only rendered while a segmentation
+   overlay is actually being shown, since opacity is meaningless otherwise. */
+.floating-overlay-control {
+  width: min(240px, calc(100vw - 60px));
+  padding: 10px 14px;
+  border: 1px solid rgba(79, 214, 197, 0.22);
+  border-top: 2px solid #4fd6c5;
+  border-radius: 10px;
+  background: rgba(10, 19, 24, 0.92);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.42), 0 0 32px rgba(79, 214, 197, 0.1);
+  backdrop-filter: blur(16px);
+}
+
+.floating-overlay-control label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  margin: 0;
+  color: #d9e7ec;
+  font-size: 0.86rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.floating-overlay-control input[type="range"] {
+  width: 100%;
+}
+
 .floating-slice-control {
   position: fixed;
   left: 50%;
@@ -1214,13 +1268,8 @@ select {
     height: 360px;
   }
 
-  .overlay-control-bar label {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .overlay-control-bar input[type="range"] {
-    width: 100%;
+  .floating-overlay-control {
+    width: calc(100% - 36px);
   }
 
   .floating-corner {

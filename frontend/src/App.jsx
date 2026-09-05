@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ImageViewer from "./components/ImageViewer";
 import DifferenceViewer from "./components/DifferenceViewer";
 import MetricPanel from "./components/MetricPanel";
@@ -137,6 +137,52 @@ function App() {
     setSliceDisplayValue(value);
     handleSliceChange(value);
   };
+
+  // Mouse-wheel slice scrubbing, active only while the cursor is actually
+  // over a plot (a .viewer-preview box) - not the header, controls, gaps
+  // between tiles, or the rest of the page, which all keep scrolling the
+  // page normally. Same underlying sliceIndex as the slider, so both stay
+  // in sync and either can be used at any time. A standard mouse wheel
+  // notch reports deltaY ~100, so that's the threshold for "one slice
+  // step"; a trackpad's much smaller deltas accumulate toward it instead of
+  // skipping several slices per event. Committing (the actual
+  // fetch-triggering update) is debounced the same way slider drags are - a
+  // fast flick shows intermediate slices instantly but only the slice you
+  // stop on fires the backend requests.
+  //
+  // This has to be a native (non-React) listener: React attaches `onWheel`
+  // as a passive DOM listener by default, so e.preventDefault() inside a
+  // React handler is silently ignored and the page would scroll along with
+  // the slice change instead of staying put. Listening on the document
+  // (rather than each tile) and checking the event's target means there's
+  // nothing to enable/disable on click - it's simply live wherever the
+  // cursor happens to be.
+  const wheelCommitTimeoutRef = useRef(null);
+
+  useEffect(() => {
+    const WHEEL_STEP_DELTA = 100;
+    const wheelAccum = { current: 0 };
+
+    const handleWheel = (e) => {
+      if (!canUseSliceSlider) return;
+      if (!e.target.closest(".viewer-preview")) return;
+      e.preventDefault();
+      wheelAccum.current += e.deltaY;
+      if (Math.abs(wheelAccum.current) < WHEEL_STEP_DELTA) return;
+      const steps = Math.trunc(wheelAccum.current / WHEEL_STEP_DELTA);
+      wheelAccum.current -= steps * WHEEL_STEP_DELTA;
+
+      setSliceDisplayValue((current) => {
+        const next = Math.max(0, Math.min(maxSliceIndex, current + steps));
+        if (wheelCommitTimeoutRef.current) clearTimeout(wheelCommitTimeoutRef.current);
+        wheelCommitTimeoutRef.current = setTimeout(() => handleSliceChange(next), 120);
+        return next;
+      });
+    };
+
+    document.addEventListener("wheel", handleWheel, { passive: false });
+    return () => document.removeEventListener("wheel", handleWheel);
+  }, [canUseSliceSlider, maxSliceIndex]);
 
   const computeMetrics = async (fixedSeg, movingSeg) => {
     if (!fixedSeg || !movingSeg) return null;
@@ -358,27 +404,12 @@ function App() {
   return (
     <div className="app-shell">
       <header>
-        <h1>Medical Image Registration Viewer</h1>
-        <p>Load 2D/3D images, displacement fields, and compute registration metrics.</p>
+        <h1>Awesome Image Registration Dashboard</h1>
+        <p>Load two scans, register them, and see exactly how well it worked — down to the last voxel.</p>
       </header>
 
       <section className="metrics-row">
         <MetricPanel metrics={metrics} metricsBefore={metricsBefore} jacobian={jacobian} />
-      </section>
-
-      <section className="overlay-control-bar">
-        <label>
-          Overlay opacity: {Math.round(overlayOpacity * 100)}%
-          <input
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={overlayOpacity}
-            disabled={!showOverlay}
-            onChange={(e) => setOverlayOpacity(Number(e.target.value))}
-          />
-        </label>
       </section>
 
       <section className="viewer-row main-viewers-row">
@@ -483,6 +514,21 @@ function App() {
       )}
 
       <div className="floating-corner">
+        {showOverlay && (
+          <div className="floating-overlay-control">
+            <label>
+              Overlay opacity: {Math.round(overlayOpacity * 100)}%
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={overlayOpacity}
+                onChange={(e) => setOverlayOpacity(Number(e.target.value))}
+              />
+            </label>
+          </div>
+        )}
         <div className={`floating-menu-group ${dataMenuOpen ? "floating-menu-open" : ""}`}>
           <div className="floating-menu-panel data-menu-panel" aria-hidden={!dataMenuOpen}>
             <button className="secondary-action data-menu-span" onClick={handleOpenSamplePicker}>
