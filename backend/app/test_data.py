@@ -2,6 +2,7 @@ import numpy as np
 import nibabel as nib
 import os
 import torch
+from scipy import ndimage
 
 
 def generate_circle_expansion_2d(shape=(64, 64), radius=16, expansion=8):
@@ -151,30 +152,114 @@ def save_pt(arr, path, channel_first=False):
 
 
 def generate_and_save_samples(out_dir="backend/test_samples"):
+    """Synthetic fixed/moving pair: a circle expanding + a circle shrinking,
+    plus their segmentations. No displacement field is shipped - that's meant
+    to be produced by actually running registration, not a pre-baked sample.
+    """
     os.makedirs(out_dir, exist_ok=True)
-    img2d_fixed, img2d_moving, seg2d_fixed, seg2d_moving, disp2d = generate_circle_expansion_2d()
+    img2d_fixed, img2d_moving, seg2d_fixed, seg2d_moving, _disp = generate_circle_expansion_2d()
     save_nifti(img2d_fixed, os.path.join(out_dir, "img2d_fixed.nii.gz"))
     save_nifti(img2d_moving, os.path.join(out_dir, "img2d_moving.nii.gz"))
     save_nifti(seg2d_fixed.astype(np.uint8), os.path.join(out_dir, "seg2d_fixed.nii.gz"))
     save_nifti(seg2d_moving.astype(np.uint8), os.path.join(out_dir, "seg2d_moving.nii.gz"))
-    save_pt(disp2d, os.path.join(out_dir, "disp2d_chlast.pt"), channel_first=False)
-    save_pt(disp2d, os.path.join(out_dir, "disp2d_chfirst.pt"), channel_first=True)
 
-    img2d_bw, seg2d_bw = generate_bw_image()
-    disp2d_rand = generate_random_disp_2d()
-    disp2d_expand_shrink = generate_local_expand_shrink_disp_2d()
-    save_nifti(img2d_bw, os.path.join(out_dir, "img2d_bw.nii.gz"))
-    save_nifti(seg2d_bw.astype(np.uint8), os.path.join(out_dir, "seg2d_bw.nii.gz"))
-    save_pt(disp2d_rand, os.path.join(out_dir, "disp2d_random.pt"), channel_first=False)
-    save_pt(
-        disp2d_expand_shrink,
-        os.path.join(out_dir, "disp2d_local_expand_shrink.pt"),
-        channel_first=False,
-    )
 
-    img3d, seg3d = generate_3d_image()
-    disp3d = generate_radial_disp_3d()
-    save_nifti(img3d, os.path.join(out_dir, "img3d.nii.gz"))
-    save_nifti(seg3d.astype(np.uint8), os.path.join(out_dir, "seg3d.nii.gz"))
-    save_pt(disp3d, os.path.join(out_dir, "disp3d_chlast.pt"), channel_first=False)
-    save_pt(disp3d, os.path.join(out_dir, "disp3d_chfirst.pt"), channel_first=True)
+def _mask_bbox(seg_a, seg_b, margin=20):
+    """Bounding box (with margin, clipped to bounds) around the union of two
+    same-shaped masks - works for 2D or 3D. Used to crop a fixed/moving pair
+    to a common region that contains the structure of interest in both
+    frames despite it moving/changing shape between them.
+    """
+    combined = (seg_a > 0) | (seg_b > 0)
+    slices = []
+    for axis in range(combined.ndim):
+        other_axes = tuple(a for a in range(combined.ndim) if a != axis)
+        proj = np.any(combined, axis=other_axes)
+        idx = np.where(proj)[0]
+        if idx.size == 0:
+            slices.append(slice(0, combined.shape[axis]))
+        else:
+            lo = max(0, int(idx[0]) - margin)
+            hi = min(combined.shape[axis], int(idx[-1]) + margin + 1)
+            slices.append(slice(lo, hi))
+    return tuple(slices)
+
+
+def generate_acdc_sample(out_dir="backend/test_samples", acdc_root="/home/anna/data/ACDC", patient="patient019", margin=20):
+    """Extract the mid short-axis slice of the ED and ES frames (plus their
+    ground-truth segmentations) for one ACDC training patient as a
+    fixed/moving pair, cropped to a common region around the heart so it
+    isn't a tiny fraction of a mostly-background thorax slice.
+    """
+    patient_dir = os.path.join(acdc_root, "training", patient)
+    info = {}
+    with open(os.path.join(patient_dir, "Info.cfg")) as f:
+        for line in f:
+            if ":" in line:
+                key, value = line.split(":", 1)
+                info[key.strip()] = value.strip()
+    ed_frame = int(info["ED"])
+    es_frame = int(info["ES"])
+
+    def load_mid_slice(path, dtype=np.float32):
+        arr = np.asarray(nib.load(path).get_fdata(dtype=np.float32))
+        mid = arr.shape[-1] // 2
+        return arr[:, :, mid].astype(dtype)
+
+    fixed_img = load_mid_slice(os.path.join(patient_dir, f"{patient}_frame{ed_frame:02d}.nii.gz"))
+    moving_img = load_mid_slice(os.path.join(patient_dir, f"{patient}_frame{es_frame:02d}.nii.gz"))
+    fixed_seg = load_mid_slice(os.path.join(patient_dir, f"{patient}_frame{ed_frame:02d}_gt.nii.gz"), dtype=np.uint8)
+    moving_seg = load_mid_slice(os.path.join(patient_dir, f"{patient}_frame{es_frame:02d}_gt.nii.gz"), dtype=np.uint8)
+
+    bbox = _mask_bbox(fixed_seg, moving_seg, margin=margin)
+    fixed_img = fixed_img[bbox]
+    moving_img = moving_img[bbox]
+    fixed_seg = fixed_seg[bbox]
+    moving_seg = moving_seg[bbox]
+
+    os.makedirs(out_dir, exist_ok=True)
+    save_nifti(fixed_img, os.path.join(out_dir, "acdc_fixed.nii.gz"))
+    save_nifti(moving_img, os.path.join(out_dir, "acdc_moving.nii.gz"))
+    save_nifti(fixed_seg, os.path.join(out_dir, "acdc_fixed_seg.nii.gz"))
+    save_nifti(moving_seg, os.path.join(out_dir, "acdc_moving_seg.nii.gz"))
+
+
+def generate_nlst_sample(
+    out_dir="backend/test_samples",
+    nlst_root="/home/anna/data/NLST2023/NLST",
+    patient="0001",
+    margin=10,
+    downsample=3,
+):
+    """Extract a real 3D fixed/moving pair (plus lung segmentations) from the
+    Learn2Reg NLST lung CT dataset: '_0000' is the baseline (fixed) scan and
+    '_0001' the follow-up (moving) scan for the same patient. Cropped to the
+    union of both lung masks (with margin) and downsampled, since the raw
+    scans are ~224^3 - full resolution would make every interactive
+    recompute (Jacobian, shear, ICE, ...) far too slow for a demo.
+    """
+    def load(name):
+        return np.asarray(nib.load(os.path.join(nlst_root, name)).get_fdata(dtype=np.float32))
+
+    fixed_img = load(f"imagesTr/NLST_{patient}_0000.nii.gz")
+    moving_img = load(f"imagesTr/NLST_{patient}_0001.nii.gz")
+    fixed_seg = load(f"masksTr/NLST_{patient}_0000.nii.gz").astype(np.uint8)
+    moving_seg = load(f"masksTr/NLST_{patient}_0001.nii.gz").astype(np.uint8)
+
+    bbox = _mask_bbox(fixed_seg, moving_seg, margin=margin)
+    fixed_img = fixed_img[bbox]
+    moving_img = moving_img[bbox]
+    fixed_seg = fixed_seg[bbox]
+    moving_seg = moving_seg[bbox]
+
+    zoom = 1.0 / downsample
+    fixed_img = ndimage.zoom(fixed_img, zoom, order=1).astype(np.float32)
+    moving_img = ndimage.zoom(moving_img, zoom, order=1).astype(np.float32)
+    fixed_seg = ndimage.zoom(fixed_seg, zoom, order=0).astype(np.uint8)
+    moving_seg = ndimage.zoom(moving_seg, zoom, order=0).astype(np.uint8)
+
+    os.makedirs(out_dir, exist_ok=True)
+    save_nifti(fixed_img, os.path.join(out_dir, "nlst_fixed.nii.gz"))
+    save_nifti(moving_img, os.path.join(out_dir, "nlst_moving.nii.gz"))
+    save_nifti(fixed_seg, os.path.join(out_dir, "nlst_fixed_seg.nii.gz"))
+    save_nifti(moving_seg, os.path.join(out_dir, "nlst_moving_seg.nii.gz"))

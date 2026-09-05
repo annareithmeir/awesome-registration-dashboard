@@ -1,0 +1,3 @@
+- add volume change +20% in color
+- add register with unigrad, choose sim (for multimodal)
+- add zoom

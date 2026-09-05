@@ -6,4 +6,5 @@ scipy>=1.14.0
 nibabel==4.0.2
 torch==2.13.0
 scikit-image==0.26.0
+niftyreg==1.5.70rc1
 pytest>=8.0.0

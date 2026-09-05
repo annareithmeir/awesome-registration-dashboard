@@ -1,27 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { rotateGrid } from "../utils/rotateGrid";
 
-function JacobianViewer({ title, jacobian, sliceIndex, onSliceChange }) {
+function JacobianViewer({ title, jacobian, rotation = 0 }) {
   const canvasRef = useRef(null);
   const [preview, setPreview] = useState(null);
-  const [maxSlice, setMaxSlice] = useState(0);
   const [showTopology, setShowTopology] = useState(false);
 
   useEffect(() => {
-    if (!jacobian?.data) {
-      setPreview(null);
-      setMaxSlice(0);
-      return;
-    }
-
-    setPreview(jacobian);
-    setMaxSlice(Math.max(0, (jacobian.slice_count || 1) - 1));
+    setPreview(jacobian?.data ? jacobian : null);
   }, [jacobian]);
 
   useEffect(() => {
     if (!canvasRef.current || !preview?.data) return;
     const canvas = canvasRef.current;
-    const rows = preview.data.length;
-    const cols = rows > 0 ? preview.data[0].length : 0;
+    const previewData = rotateGrid(preview.data, rotation);
+    const rows = previewData.length;
+    const cols = rows > 0 ? previewData[0].length : 0;
     if (!rows || !cols) return;
 
     canvas.width = cols;
@@ -30,12 +24,15 @@ function JacobianViewer({ title, jacobian, sliceIndex, onSliceChange }) {
     const imageData = context.createImageData(cols, rows);
     const pixels = imageData.data;
 
-    const detValues = preview.values ?? null;
+    const detValues = preview.values ? rotateGrid(preview.values, rotation) : null;
     const hasDetValues = Array.isArray(detValues) && detValues.length > 0;
     const minDet = Number.isFinite(preview.min) ? preview.min : null;
     const maxDet = Number.isFinite(preview.max) ? preview.max : null;
     const useTopology = showTopology;
-    const zeroThreshold = 1e-6;
+    // J <= 0: folding (non-invertible / orientation-reversing).
+    const foldThreshold = 1e-6;
+    // |J - 1| within this band counts as (approximately) volume-preserving.
+    const preservationBand = 0.02;
     const valueFromNormalized = (normalized) => {
       if (hasDetValues) return normalized;
       if (minDet !== null && maxDet !== null && maxDet !== minDet) {
@@ -52,28 +49,36 @@ function JacobianViewer({ title, jacobian, sliceIndex, onSliceChange }) {
           if (hasDetValues) {
             value = detValues[row][col];
           } else {
-            const normalized = Math.max(0, Math.min(255, preview.data[row][col]));
+            const normalized = Math.max(0, Math.min(255, previewData[row][col]));
             value = valueFromNormalized(normalized);
           }
 
-          if (value < -zeroThreshold) {
+          if (value <= foldThreshold) {
+            // Folding: J <= 0
             pixels[index] = 222;
             pixels[index + 1] = 82;
             pixels[index + 2] = 75;
-          } else if (value > zeroThreshold) {
-            pixels[index] = 88;
-            pixels[index + 1] = 196;
-            pixels[index + 2] = 113;
-          } else {
+          } else if (Math.abs(value - 1) <= preservationBand) {
+            // Preservation: J == 1 (within a small tolerance)
             pixels[index] = 94;
             pixels[index + 1] = 147;
             pixels[index + 2] = 236;
+          } else if (value < 1) {
+            // Shrinkage: 0 < J < 1
+            pixels[index] = 240;
+            pixels[index + 1] = 164;
+            pixels[index + 2] = 66;
+          } else {
+            // Growth: J > 1
+            pixels[index] = 88;
+            pixels[index + 1] = 196;
+            pixels[index + 2] = 113;
           }
           pixels[index + 3] = 255;
           continue;
         }
 
-        const value = preview.data[row][col];
+        const value = previewData[row][col];
         const normalized = Math.max(0, Math.min(255, value));
         pixels[index] = normalized;
         pixels[index + 1] = normalized;
@@ -83,51 +88,48 @@ function JacobianViewer({ title, jacobian, sliceIndex, onSliceChange }) {
     }
 
     context.putImageData(imageData, 0, 0);
-  }, [preview, showTopology]);
+  }, [preview, showTopology, rotation]);
 
   return (
     <div className="viewer-card jacobian-viewer">
       <div className="viewer-header">
         <h3>{title}</h3>
         <div className="viewer-controls">
-          <label className="checkbox-control">
-            <input type="checkbox" checked={showTopology} onChange={(e) => setShowTopology(e.target.checked)} />
-            Topology changes
+          <label className="toggle-field">
+            <span className="toggle-field-label">Topology changes</span>
+            <span className="toggle-switch">
+              <input type="checkbox" checked={showTopology} onChange={(e) => setShowTopology(e.target.checked)} />
+              <span className="toggle-slider" />
+            </span>
           </label>
         </div>
       </div>
       <div className="viewer-box">
+        {/* The legend overlays the preview instead of sitting above it, so
+            toggling it (or the plain Jacobian tile having no legend at all)
+            never changes the preview box's size - every viewer tile keeps
+            an identical-size preview area, and the images all line up. */}
         <div className="viewer-preview">
           {preview ? <canvas ref={canvasRef} className="preview-canvas" /> : "No jacobian preview yet"}
-        </div>
-        <div className={`jacobian-legend ${showTopology ? "" : "jacobian-legend-hidden"}`}>
+          <div className={`jacobian-legend jacobian-legend-overlay ${showTopology ? "" : "jacobian-legend-hidden"}`}>
             <div className="legend-item">
               <span className="legend-swatch legend-negative" />
-              Negative determinant
+              Folding
+            </div>
+            <div className="legend-item">
+              <span className="legend-swatch legend-shrinkage" />
+              Shrinkage
             </div>
             <div className="legend-item">
               <span className="legend-swatch legend-zero" />
-              Zero determinant
+              Preservation
             </div>
             <div className="legend-item">
               <span className="legend-swatch legend-positive" />
-              Positive determinant
+              Growth
             </div>
-        </div>
-        {preview?.is_3d && (
-          <div className="slice-control">
-            <label>
-              Slice: {Math.min(sliceIndex, maxSlice) + 1} / {maxSlice + 1}
-              <input
-                type="range"
-                min="0"
-                max={maxSlice}
-                value={Math.min(sliceIndex, maxSlice)}
-                onChange={(e) => onSliceChange(Number(e.target.value))}
-              />
-            </label>
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

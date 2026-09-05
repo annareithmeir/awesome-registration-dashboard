@@ -92,7 +92,7 @@ def test_load_pt_channel_orders():
 
 
 def test_load_nifti_from_bytes():
-    sample_path = Path(__file__).resolve().parents[1] / "test_samples" / "img2d.nii.gz"
+    sample_path = Path(__file__).resolve().parents[1] / "test_samples" / "img2d_fixed.nii.gz"
     data = sample_path.read_bytes()
     arr = processing.load_nifti_bytes(data)
     assert arr.ndim == 2

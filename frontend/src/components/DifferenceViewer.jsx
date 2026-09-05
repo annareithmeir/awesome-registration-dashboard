@@ -1,18 +1,39 @@
 import { useEffect, useRef, useState } from "react";
+import { rotateGrid } from "../utils/rotateGrid";
 
-function DifferenceViewer({ title, fixedFile, movingFile, fixedSegFile, movingSegFile, sliceIndex }) {
+function DifferenceViewer({
+  title,
+  fixedFile,
+  movingFile,
+  fixedSegFile,
+  movingSegFile,
+  warpedFile,
+  warpedSegFile,
+  sliceIndex,
+  axis = 0,
+  showSegmentations,
+  rotation = 0,
+}) {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState("Loading difference...");
-  const [useSegmentations, setUseSegmentations] = useState(false);
+  const useSegmentations = showSegmentations;
+  const [useWarped, setUseWarped] = useState(false);
   const canvasRef = useRef(null);
+  const compareLabel = useWarped ? "warped" : "moving";
 
   useEffect(() => {
     const activeFixed = useSegmentations ? fixedSegFile : fixedFile;
-    const activeMoving = useSegmentations ? movingSegFile : movingFile;
+    const activeMoving = useWarped
+      ? (useSegmentations ? warpedSegFile : warpedFile)
+      : (useSegmentations ? movingSegFile : movingFile);
 
     if (!activeFixed || !activeMoving) {
       setPreview(null);
-      setMessage(useSegmentations ? "Fixed and moving segmentations required for difference view." : "Fixed and moving images required for difference view.");
+      setMessage(
+        useSegmentations
+          ? `Fixed and ${compareLabel} segmentations required for difference view.`
+          : `Fixed and ${compareLabel} images required for difference view.`
+      );
       return;
     }
 
@@ -21,6 +42,7 @@ function DifferenceViewer({ title, fixedFile, movingFile, fixedSegFile, movingSe
       formData.append("file", file);
       formData.append("slice_index", String(sliceIndex));
       formData.append("mode", useSegmentations ? "segmentation" : "image");
+      formData.append("axis", String(axis));
       const response = await fetch("http://localhost:8000/preview-slice", {
         method: "POST",
         body: formData,
@@ -69,13 +91,14 @@ function DifferenceViewer({ title, fixedFile, movingFile, fixedSegFile, movingSe
     return () => {
       canceled = true;
     };
-  }, [fixedFile, movingFile, fixedSegFile, movingSegFile, sliceIndex, useSegmentations]);
+  }, [fixedFile, movingFile, fixedSegFile, movingSegFile, warpedFile, warpedSegFile, sliceIndex, axis, useSegmentations, useWarped]);
 
   useEffect(() => {
     if (!preview?.data || !canvasRef.current) return;
     const canvas = canvasRef.current;
-    const rows = preview.data.length;
-    const cols = rows > 0 ? preview.data[0].length : 0;
+    const previewData = rotateGrid(preview.data, rotation);
+    const rows = previewData.length;
+    const cols = rows > 0 ? previewData[0].length : 0;
     if (!rows || !cols) return;
 
     canvas.width = cols;
@@ -87,7 +110,7 @@ function DifferenceViewer({ title, fixedFile, movingFile, fixedSegFile, movingSe
     let maxDiff = 0;
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
-        const diff = preview.data[row][col];
+        const diff = previewData[row][col];
         if (diff > maxDiff) maxDiff = diff;
       }
     }
@@ -95,7 +118,7 @@ function DifferenceViewer({ title, fixedFile, movingFile, fixedSegFile, movingSe
     for (let row = 0; row < rows; row += 1) {
       for (let col = 0; col < cols; col += 1) {
         const index = (row * cols + col) * 4;
-        const diff = preview.data[row][col];
+        const diff = previewData[row][col];
         const value = maxDiff > 0 ? Math.round((diff / maxDiff) * 255) : 0;
         pixels[index] = value;
         pixels[index + 1] = value;
@@ -105,24 +128,37 @@ function DifferenceViewer({ title, fixedFile, movingFile, fixedSegFile, movingSe
     }
 
     context.putImageData(imageData, 0, 0);
-  }, [preview]);
+  }, [preview, rotation]);
 
   return (
     <div className="viewer-card">
       <div className="viewer-header">
         <h3>{title}</h3>
         <div className="viewer-controls">
-          {fixedSegFile && movingSegFile && (
-            <label className="checkbox-control">
-              <input type="checkbox" checked={useSegmentations} onChange={(e) => setUseSegmentations(e.target.checked)} />
-              Segmentations
-            </label>
+          {warpedFile && (
+            <div className="toggle-switch-control">
+              <span className={!useWarped ? "toggle-label active" : "toggle-label"}>Moving</span>
+              <label className="toggle-switch">
+                <input type="checkbox" checked={useWarped} onChange={(e) => setUseWarped(e.target.checked)} />
+                <span className="toggle-slider" />
+              </label>
+              <span className={useWarped ? "toggle-label active" : "toggle-label"}>Warped</span>
+            </div>
           )}
         </div>
       </div>
       <div className="viewer-box">
         <div className="viewer-preview">
-          {preview ? <canvas ref={canvasRef} className="preview-canvas" /> : message}
+          {preview ? (
+            <canvas ref={canvasRef} className="preview-canvas" />
+          ) : message === "Loading difference..." ? (
+            <span className="viewer-loading">
+              <span className="viewer-spinner" />
+              {message}
+            </span>
+          ) : (
+            message
+          )}
         </div>
       </div>
     </div>

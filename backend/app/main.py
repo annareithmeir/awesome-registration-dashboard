@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
 
-from . import processing, test_data
+from . import processing, registration, test_data
 
 app = FastAPI()
 app.add_middleware(
@@ -22,6 +22,10 @@ sample_dir = os.path.join(os.path.dirname(__file__), "..", "test_samples")
 os.makedirs(sample_dir, exist_ok=True)
 app.mount("/test_samples", StaticFiles(directory=sample_dir), name="test_samples")
 
+registration_jobs_dir = os.path.join(os.path.dirname(__file__), "..", "registration_jobs")
+os.makedirs(registration_jobs_dir, exist_ok=True)
+app.mount("/registration_jobs", StaticFiles(directory=registration_jobs_dir), name="registration_jobs")
+
 
 def _load_image_bytes(data: bytes, filename: str):
     if filename.endswith(".nii") or filename.endswith(".nii.gz"):
@@ -32,11 +36,20 @@ def _load_image_bytes(data: bytes, filename: str):
 
 
 @app.post("/preview-slice")
-async def preview_slice(file: UploadFile = File(...), slice_index: int = Form(0), mode: str = Form("image")):
+async def preview_slice(
+    file: UploadFile = File(...),
+    slice_index: int = Form(0),
+    mode: str = Form("image"),
+    axis: int = Form(0),
+):
     try:
         data = await file.read()
         arr = _load_image_bytes(data, file.filename)
         arr = np.asarray(arr, dtype=np.float32)
+        # Which of the volume's (up to) three spatial axes to slice along -
+        # 0/1/2 select the anatomical plane, as chosen in the frontend's
+        # axis picker. Only meaningful once a volume is actually 3D.
+        spatial_axis = max(0, min(axis, 2))
 
         if file.filename.endswith(".pt"):
             arr = processing.normalize_disp(arr)
@@ -58,15 +71,24 @@ async def preview_slice(file: UploadFile = File(...), slice_index: int = Form(0)
                 warp_x = xx.astype(np.float32) + arr[..., 0]
                 warp_y = yy.astype(np.float32) + arr[..., 1]
             elif arr.ndim == 4 and arr.shape[-1] in (2, 3):
-                if slice_index < 0 or slice_index >= arr.shape[0]:
+                if slice_index < 0 or slice_index >= arr.shape[spatial_axis]:
                     raise HTTPException(status_code=400, detail="Slice index out of range")
-                disp = arr[slice_index]
+                disp = np.take(arr, slice_index, axis=spatial_axis)
+                # The two spatial axes left after removing `spatial_axis`
+                # become the preview's (row, col) plane, in their original
+                # order. Displacement channels are ordered (x, y, z), which
+                # is the reverse of the volume's (axis0, axis1, axis2) =
+                # (z, y, x) convention used elsewhere (see
+                # processing.compute_jacobian_det) - so the channel for a
+                # given remaining axis is `2 - axis`.
+                row_axis, col_axis = (a for a in (0, 1, 2) if a != spatial_axis)
+                row_channel, col_channel = 2 - row_axis, 2 - col_axis
                 yy, xx = np.mgrid[0:disp.shape[0], 0:disp.shape[1]]
-                warp_x = xx.astype(np.float32) + disp[..., 0]
-                warp_y = yy.astype(np.float32) + disp[..., 1]
+                warp_x = xx.astype(np.float32) + disp[..., col_channel]
+                warp_y = yy.astype(np.float32) + disp[..., row_channel]
                 preview = np.zeros((disp.shape[0], disp.shape[1]), dtype=np.float32)
                 volume_shape = arr.shape
-                slice_count = arr.shape[0]
+                slice_count = arr.shape[spatial_axis]
                 is_3d = True
             else:
                 raise HTTPException(status_code=400, detail="Unsupported displacement field dimensions")
@@ -78,13 +100,16 @@ async def preview_slice(file: UploadFile = File(...), slice_index: int = Form(0)
                 slice_count = 1
                 is_3d = False
             elif arr.ndim == 3:
-                if slice_index < 0 or slice_index >= arr.shape[0]:
+                if slice_index < 0 or slice_index >= arr.shape[spatial_axis]:
                     raise HTTPException(status_code=400, detail="Slice index out of range")
-                preview = arr[slice_index]
+                preview = np.take(arr, slice_index, axis=spatial_axis)
                 volume_shape = arr.shape
-                slice_count = arr.shape[0]
+                slice_count = arr.shape[spatial_axis]
                 is_3d = True
             elif arr.ndim == 4:
+                # Rare layout (e.g. an explicit channel dim) that doesn't fit
+                # the plain (D, H, W) convention above - always slice along
+                # the first axis regardless of the requested axis.
                 if slice_index < 0 or slice_index >= arr.shape[0]:
                     raise HTTPException(status_code=400, detail="Slice index out of range")
                 preview = arr[slice_index, 0]
@@ -124,51 +149,83 @@ async def preview_slice(file: UploadFile = File(...), slice_index: int = Form(0)
         raise HTTPException(status_code=400, detail=str(e))
 
 
+def _cap_non_finite(field: np.ndarray, mode: str = "zero"):
+    """Replace non-finite entries so the array is safe to summarize/serialize.
+    "zero" is for fields that are essentially never non-finite in practice
+    (determinant, inverse-consistency error) — treat any stray value as 0.
+    "cap" is for fields that can genuinely blow up at degenerate points
+    (shear index, where a near-singular Jacobian gives a divide-by-~0) —
+    replacing those with 0 would misleadingly read as "no distortion", so
+    instead clamp them to the largest finite value actually observed.
+    """
+    field = np.asarray(field, dtype=np.float32)
+    finite_mask = np.isfinite(field)
+    if finite_mask.all():
+        return field
+    if mode == "cap":
+        cap = float(np.max(field[finite_mask])) if finite_mask.any() else 1000.0
+        return np.where(finite_mask, field, cap).astype(np.float32)
+    return np.nan_to_num(field, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def _scalar_field_payload(field: np.ndarray, slice_index: int, axis: int = 0):
+    if field.ndim == 2:
+        preview = field
+        volume_shape = field.shape
+        slice_count = 1
+        is_3d = False
+    elif field.ndim == 3:
+        spatial_axis = max(0, min(axis, 2))
+        if slice_index < 0 or slice_index >= field.shape[spatial_axis]:
+            raise HTTPException(status_code=400, detail="Slice index out of range")
+        preview = np.take(field, slice_index, axis=spatial_axis)
+        volume_shape = field.shape
+        slice_count = field.shape[spatial_axis]
+        is_3d = True
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported scalar field dimensions")
+
+    min_val = float(np.min(preview))
+    max_val = float(np.max(preview))
+    if np.isclose(max_val, min_val):
+        normalized = np.zeros_like(preview, dtype=np.uint8)
+    else:
+        normalized = ((preview - min_val) / (max_val - min_val) * 255.0).astype(np.uint8)
+
+    return {
+        "min": float(np.min(field)),
+        "max": float(np.max(field)),
+        "mean": float(np.mean(field)),
+        "shape": list(field.shape),
+        "preview_shape": list(preview.shape),
+        "volume_shape": list(volume_shape),
+        "slice_count": slice_count,
+        "is_3d": is_3d,
+        "data": normalized.tolist(),
+        "values": preview.tolist(),
+    }
+
+
 @app.post("/compute-jacobian")
-async def compute_jacobian(disp_field: UploadFile = File(...), slice_index: int = Form(0)):
+async def compute_jacobian(disp_field: UploadFile = File(...), slice_index: int = Form(0), axis: int = Form(0)):
     try:
         data = await disp_field.read()
         arr = _load_image_bytes(data, disp_field.filename)
         norm = processing.normalize_disp(arr)
-        det = processing.compute_jacobian_det(norm)
+
+        det = _cap_non_finite(processing.compute_jacobian_det(norm), mode="zero")
         frac_neg = processing.frac_negative_jacobian(det)
+        log_jac = processing.log_jacobian_stats(det)
+        shear = _cap_non_finite(processing.compute_shear_index(norm), mode="cap")
+        ice = _cap_non_finite(processing.compute_inverse_consistency_error(norm), mode="zero")
 
-        if det.ndim == 2:
-            preview = det
-            volume_shape = det.shape
-            slice_count = 1
-            is_3d = False
-        elif det.ndim == 3:
-            if slice_index < 0 or slice_index >= det.shape[0]:
-                raise HTTPException(status_code=400, detail="Slice index out of range")
-            preview = det[slice_index]
-            volume_shape = det.shape
-            slice_count = det.shape[0]
-            is_3d = True
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported Jacobian determinant dimensions")
+        payload = _scalar_field_payload(det, slice_index, axis)
+        payload["frac_negative"] = frac_neg
+        payload["log_jacobian"] = log_jac
+        payload["shear"] = _scalar_field_payload(shear, slice_index, axis)
+        payload["inverse_consistency"] = _scalar_field_payload(ice, slice_index, axis)
 
-        preview = np.nan_to_num(preview, nan=0.0, posinf=0.0, neginf=0.0)
-        min_val = float(np.min(preview))
-        max_val = float(np.max(preview))
-        if np.isclose(max_val, min_val):
-            normalized = np.zeros_like(preview, dtype=np.uint8)
-        else:
-            normalized = ((preview - min_val) / (max_val - min_val) * 255.0).astype(np.uint8)
-
-        return JSONResponse({
-            "min": float(np.min(det)),
-            "max": float(np.max(det)),
-            "mean": float(np.mean(det)),
-            "frac_negative": frac_neg,
-            "shape": det.shape,
-            "preview_shape": list(preview.shape),
-            "volume_shape": list(volume_shape),
-            "slice_count": slice_count,
-            "is_3d": is_3d,
-            "data": normalized.tolist(),
-            "values": preview.tolist(),
-        })
+        return JSONResponse(payload)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -230,6 +287,65 @@ async def generate_samples():
     files = [f for f in os.listdir(sample_dir) if os.path.isfile(os.path.join(sample_dir, f))]
     urls = [f"http://localhost:8000/test_samples/{f}" for f in sorted(files)]
     return JSONResponse({"generated_files": sorted(files), "urls": urls})
+
+
+@app.post("/run-registration")
+async def run_registration(
+    fixed: UploadFile = File(...),
+    moving: UploadFile = File(...),
+    moving_seg: UploadFile | None = File(None),
+    registration_type: str = Form("deformable"),
+    bending_energy: float | None = Form(None),
+    max_iterations: int | None = Form(None),
+    grid_spacing: float | None = Form(None),
+):
+    try:
+        job_id, job_dir = registration.create_job(
+            registration_jobs_dir, registration_type, bending_energy, max_iterations, grid_spacing
+        )
+        fixed_bytes = await fixed.read()
+        moving_bytes = await moving.read()
+        moving_seg_bytes = await moving_seg.read() if moving_seg is not None else None
+        registration.start_job(
+            job_id,
+            job_dir,
+            fixed_bytes,
+            fixed.filename,
+            moving_bytes,
+            moving.filename,
+            moving_seg_bytes,
+            moving_seg.filename if moving_seg is not None else None,
+        )
+        return JSONResponse({"job_id": job_id})
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.get("/registration-status/{job_id}")
+async def registration_status(job_id: str):
+    status = registration.get_status(job_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Unknown job id")
+
+    results = status["results"]
+    if results:
+        results = {
+            "warped_image": f"http://localhost:8000/registration_jobs/{job_id}/{results['warped_image']}",
+            "displacement": f"http://localhost:8000/registration_jobs/{job_id}/{results['displacement']}",
+            "warped_segmentation": (
+                f"http://localhost:8000/registration_jobs/{job_id}/{results['warped_segmentation']}"
+                if results["warped_segmentation"]
+                else None
+            ),
+        }
+
+    return JSONResponse({
+        "status": status["status"],
+        "phase": status["phase"],
+        "progress": status["progress"],
+        "error": status["error"],
+        "results": results,
+    })
 
 
 if __name__ == "__main__":
