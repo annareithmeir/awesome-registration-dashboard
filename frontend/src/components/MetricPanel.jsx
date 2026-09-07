@@ -41,27 +41,26 @@ const DICE_COLOR = "#4fd6c5";
 const HD_COLOR = "#4e94da";
 
 // Compact in-row bar: fill length encodes this value on a shared [min, max]
-// scale across all structures. The tick marks where the mean across all
-// structures falls, so a glance at any row shows whether it's above or
-// below the group average.
-function MetricBar({ value, mean, min, max, color }) {
+// scale. The tick marks this same structure's own before-registration (_0)
+// value, so a glance at any row shows how much that specific structure
+// changed - not how it compares to other labels' average.
+function MetricBar({ value, reference, min, max, color }) {
   const range = max - min || 1;
   const toPct = (v) => Math.max(0, Math.min(100, ((v - min) / range) * 100));
   const valuePct = toPct(value);
-  const meanPct = toPct(mean);
+  const hasReference = Number.isFinite(reference);
 
   return (
-    <span className="metric-bar" title={`${value.toFixed(4)} (mean ${mean.toFixed(4)})`}>
+    <span
+      className="metric-bar"
+      title={hasReference ? `${value.toFixed(4)} (before ${reference.toFixed(4)})` : value.toFixed(4)}
+    >
       <span className="metric-bar-track">
         <span className="metric-bar-fill" style={{ width: `${valuePct}%`, background: color }} />
-        <span className="metric-bar-mean" style={{ left: `${meanPct}%` }} />
+        {hasReference && <span className="metric-bar-reference" style={{ left: `${toPct(reference)}%` }} />}
       </span>
     </span>
   );
-}
-
-function mean(values) {
-  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
 }
 
 function MetricGroup({ className, title, children }) {
@@ -90,7 +89,7 @@ function MetricPanel({ metrics, metricsBefore, jacobian }) {
               <div className="stat-grid">
                 {showBefore && <StatRow label="DSC₀" value={metricsBefore.dice?.toFixed(4)} />}
                 <StatRow label="DSC" value={metrics.dice?.toFixed(4)} />
-                <StatRow label="DSC95" value={metrics.dice95?.toFixed(4)} />
+                <StatRow label="DSC30" value={metrics.dice30?.toFixed(4)} />
               </div>
               <div className="stat-grid">
                 {showBefore && <StatRow label="HD₀" value={metricsBefore.hausdorff?.toFixed(4)} />}
@@ -99,20 +98,12 @@ function MetricPanel({ metrics, metricsBefore, jacobian }) {
               </div>
               {Array.isArray(metrics.per_structure) && metrics.per_structure.length > 0 && (() => {
                 const structures = metrics.per_structure;
-                const diceValues = structures.map((s) => s.dice).filter(Number.isFinite);
                 const hdValues = structures.map((s) => s.hausdorff).filter(Number.isFinite);
-                const diceMean = mean(diceValues);
-                const hdMean = mean(hdValues);
 
                 const beforeByLabel = new Map((metricsBefore?.per_structure || []).map((s) => [s.label, s]));
-                const beforeDiceValues = structures
-                  .map((s) => beforeByLabel.get(s.label)?.dice)
-                  .filter(Number.isFinite);
                 const beforeHdValues = structures
                   .map((s) => beforeByLabel.get(s.label)?.hausdorff)
                   .filter(Number.isFinite);
-                const beforeDiceMean = mean(beforeDiceValues);
-                const beforeHdMean = mean(beforeHdValues);
 
                 // Before/after HD bars share one scale (the union of both sets)
                 // so bar length is directly comparable between the two rows,
@@ -124,7 +115,7 @@ function MetricPanel({ metrics, metricsBefore, jacobian }) {
                 return (
                   <div className="structure-metrics">
                     <div className="structure-metrics-title">Per-structure ({structures.length})</div>
-                    <div className="metric-group-subtitle">bar = value, tick = mean across labels</div>
+                    <div className="metric-group-subtitle">bar = value, tick = this structure's before-registration value</div>
                     <div className="structure-metrics-list">
                       {structures.map((item) => {
                         const color = getSegmentationColorCss(item.label);
@@ -139,25 +130,25 @@ function MetricPanel({ metrics, metricsBefore, jacobian }) {
                               {showBefore && Number.isFinite(beforeItem?.dice) && (
                                 <div className="structure-metric-line structure-metric-line-before">
                                   <span className="structure-metric-name">Dice₀</span>
-                                  <MetricBar value={beforeItem.dice} mean={beforeDiceMean} min={0} max={1} color={DICE_COLOR} />
+                                  <MetricBar value={beforeItem.dice} min={0} max={1} color={DICE_COLOR} />
                                   <span className="stat-value">{beforeItem.dice.toFixed(4)}</span>
                                 </div>
                               )}
                               <div className="structure-metric-line">
                                 <span className="structure-metric-name">Dice</span>
-                                <MetricBar value={item.dice} mean={diceMean} min={0} max={1} color={DICE_COLOR} />
+                                <MetricBar value={item.dice} reference={beforeItem?.dice} min={0} max={1} color={DICE_COLOR} />
                                 <span className="stat-value">{item.dice?.toFixed(4)}</span>
                               </div>
                               {showBefore && Number.isFinite(beforeItem?.hausdorff) && (
                                 <div className="structure-metric-line structure-metric-line-before">
                                   <span className="structure-metric-name">HD₀</span>
-                                  <MetricBar value={beforeItem.hausdorff} mean={beforeHdMean} min={hdMin} max={hdMax} color={HD_COLOR} />
+                                  <MetricBar value={beforeItem.hausdorff} min={hdMin} max={hdMax} color={HD_COLOR} />
                                   <span className="stat-value">{beforeItem.hausdorff.toFixed(4)}</span>
                                 </div>
                               )}
                               <div className="structure-metric-line">
                                 <span className="structure-metric-name">HD</span>
-                                <MetricBar value={item.hausdorff} mean={hdMean} min={hdMin} max={hdMax} color={HD_COLOR} />
+                                <MetricBar value={item.hausdorff} reference={beforeItem?.hausdorff} min={hdMin} max={hdMax} color={HD_COLOR} />
                                 <span className="stat-value">{item.hausdorff?.toFixed(4)}</span>
                               </div>
                             </div>

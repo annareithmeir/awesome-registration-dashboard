@@ -4,7 +4,7 @@ import tempfile
 import numpy as np
 import nibabel as nib
 from scipy import ndimage
-from scipy.spatial.distance import cdist
+from scipy.spatial.distance import cdist, dice as _scipy_dice_distance, directed_hausdorff
 
 try:
     import torch
@@ -239,20 +239,30 @@ def _binarize(mask: np.ndarray):
 def dice_score(a: np.ndarray, b: np.ndarray):
     a = _binarize(a)
     b = _binarize(b)
-    inter = np.logical_and(a, b).sum()
-    denom = a.sum() + b.sum()
-    if denom == 0:
+    if not a.any() and not b.any():
+        # scipy's dice distance is 0/0 (nan, with a warning) here - both
+        # empty is a trivial perfect match by convention.
         return 1.0
-    return float(2.0 * inter / denom)
+    # scipy.spatial.distance.dice returns the *dissimilarity*
+    # (ntf+nft)/(2*ntt+ntf+nft); the Dice similarity coefficient is 1 minus
+    # that.
+    return float(1.0 - _scipy_dice_distance(a.ravel(), b.ravel()))
 
 
-def dice95(a: np.ndarray, b: np.ndarray):
+def dice30(a: np.ndarray, b: np.ndarray):
+    """30th percentile of per-slice Dice scores through a volume - a
+    stricter summary than the plain (whole-volume) Dice above it, since it
+    reports roughly "the worse third of slices are at or below this",
+    rather than a single number averaged over every slice regardless of how
+    badly some of them match. For a single 2D slice there's nothing to take
+    a percentile over, so this is just the plain Dice score.
+    """
     a = _binarize(a)
     b = _binarize(b)
     if a.ndim == 2:
         return dice_score(a, b)
     dices = [dice_score(a[i], b[i]) for i in range(a.shape[0])]
-    return float(np.percentile(dices, 95))
+    return float(np.percentile(dices, 30))
 
 
 def _surface_points(mask: np.ndarray):
@@ -272,14 +282,22 @@ def hausdorff(a: np.ndarray, b: np.ndarray):
         return 0.0
     if pa.size == 0 or pb.size == 0:
         return float("inf")
-    da = cdist(pa, pb)
-    db = cdist(pb, pa)
-    d_ab = np.max(np.min(da, axis=1))
-    d_ba = np.max(np.min(db, axis=1))
+    # The (symmetric) Hausdorff distance is the max of the two directed
+    # Hausdorff distances; scipy.spatial.distance.directed_hausdorff computes
+    # each one (via a linear-random-search algorithm, not a full pairwise
+    # distance matrix - faster than the cdist approach below for large point
+    # sets).
+    d_ab = directed_hausdorff(pa, pb)[0]
+    d_ba = directed_hausdorff(pb, pa)[0]
     return float(max(d_ab, d_ba))
 
 
 def hausdorff95(a: np.ndarray, b: np.ndarray):
+    # Unlike plain Hausdorff above, this needs the full distribution of
+    # nearest-neighbor distances (to take its 95th percentile), not just its
+    # max - directed_hausdorff only ever returns the max, so there's no
+    # library shortcut here; this stays a full pairwise distance matrix via
+    # cdist.
     pa = _surface_points(a)
     pb = _surface_points(b)
     if pa.size == 0 and pb.size == 0:
@@ -339,7 +357,7 @@ def per_label_metrics(a: np.ndarray, b: np.ndarray, labels=None):
             {
                 "label": int(label),
                 "dice": dice_score(a_mask, b_mask),
-                "dice95": dice95(a_mask, b_mask),
+                "dice30": dice30(a_mask, b_mask),
                 "hausdorff": hausdorff(a_mask, b_mask),
                 "hausdorff95": hausdorff95(a_mask, b_mask),
                 "fixed_voxels": int(a_mask.sum()),
@@ -347,3 +365,29 @@ def per_label_metrics(a: np.ndarray, b: np.ndarray, labels=None):
             }
         )
     return results
+
+
+def aggregate_label_metrics(per_label):
+    """The "overall" Dice/Dice30/Hausdorff/Hausdorff95 shown alongside a
+    per-structure breakdown, computed as the mean of each metric across the
+    reported structures - so it's actually consistent with (the mean of)
+    that breakdown.
+
+    This is deliberately NOT the same as computing dice_score/hausdorff
+    directly on the labels merged into one binary mask: merging first and
+    comparing second measures overlap of the union of all structures, which
+    is a different quantity from the average of each structure's own
+    overlap, and the two generally don't agree (e.g. two structures that
+    each individually overlap 50% can merge into a union that overlaps
+    anywhere from 0% to 100%, depending on whether their mismatched regions
+    coincide). Returns None when there are no labeled structures to
+    average, so the caller can fall back to comparing the images directly.
+    """
+    if not per_label:
+        return None
+    return {
+        "dice": float(np.mean([item["dice"] for item in per_label])),
+        "dice30": float(np.mean([item["dice30"] for item in per_label])),
+        "hausdorff": float(np.mean([item["hausdorff"] for item in per_label])),
+        "hausdorff95": float(np.mean([item["hausdorff95"] for item in per_label])),
+    }

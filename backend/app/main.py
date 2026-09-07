@@ -257,16 +257,24 @@ async def compute_metrics(
 
         A = _load_image_bytes(fdata, fixed_name)
         B = _load_image_bytes(mdata, moving_name)
-        dice = processing.dice_score(A, B)
-        dice95 = processing.dice95(A, B)
-        hd = processing.hausdorff(A, B)
-        hd95 = processing.hausdorff95(A, B)
+        # The "overall" numbers are the mean of the per-structure ones (see
+        # aggregate_label_metrics), not a separately-computed metric on the
+        # labels merged into one mask - those two don't generally agree.
+        # When there are no labeled structures at all (e.g. plain images
+        # with no segmentation), fall back to comparing the images directly.
+        per_structure = processing.per_label_metrics(A, B)
+        aggregate = processing.aggregate_label_metrics(per_structure) or {
+            "dice": processing.dice_score(A, B),
+            "dice30": processing.dice30(A, B),
+            "hausdorff": processing.hausdorff(A, B),
+            "hausdorff95": processing.hausdorff95(A, B),
+        }
         result = {
-            "dice": dice,
-            "dice95": dice95,
-            "hausdorff": hd,
-            "hausdorff95": hd95,
-            "per_structure": processing.per_label_metrics(A, B),
+            "dice": aggregate["dice"],
+            "dice30": aggregate["dice30"],
+            "hausdorff": aggregate["hausdorff"],
+            "hausdorff95": aggregate["hausdorff95"],
+            "per_structure": per_structure,
         }
 
         if disp_field is not None:

@@ -599,7 +599,7 @@ input[type="radio"] {
   border-radius: 999px;
 }
 
-.metric-bar-mean {
+.metric-bar-reference {
   position: absolute;
   top: -2px;
   width: 2px;
