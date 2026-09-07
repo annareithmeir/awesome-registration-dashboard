@@ -48,6 +48,17 @@ const AXIS_OPTIONS = [
   { value: 2, label: "Axial" },
 ];
 
+// Per-method iteration slider range/default - kept in one place now that
+// there are four fairly different methods (two NiftyReg CLI tools, plus
+// in-process SyN and Demons, which have no bending-energy/grid-spacing
+// concept of their own).
+const REGISTRATION_METHODS = {
+  affine: { label: "Affine (reg_aladin)", iterations: { min: 5, max: 200, step: 5, default: 25 } },
+  deformable: { label: "Deformable (reg_f3d)", iterations: { min: 50, max: 2000, step: 25, default: 750 } },
+  syn: { label: "SyN (ANTs)", iterations: { min: 10, max: 300, step: 10, default: 100 } },
+  demons: { label: "Demons (SimpleITK)", iterations: { min: 10, max: 200, step: 10, default: 50 } },
+};
+
 function App() {
   const [fixedFile, setFixedFile] = useState(null);
   const [movingFile, setMovingFile] = useState(null);
@@ -81,6 +92,7 @@ function App() {
   const [bendingEnergy, setBendingEnergy] = useState(0.005);
   const [maxIterations, setMaxIterations] = useState(750);
   const [gridSpacing, setGridSpacing] = useState(5);
+  const [demonsSmoothing, setDemonsSmoothing] = useState(1.5);
   const [registrationRunning, setRegistrationRunning] = useState(false);
   const [registrationPhase, setRegistrationPhase] = useState(null);
   const [registrationProgress, setRegistrationProgress] = useState(0);
@@ -268,11 +280,13 @@ function App() {
     }
   }, [warpedFile, dispFile]);
 
-  // reg_aladin and reg_f3d have very different natural iteration counts
-  // (NiftyReg defaults: 5 vs. 150), so reset to a sensible starting point
-  // whenever the registration mode changes; still fully overridable below.
+  // Each method has a very different natural iteration count (NiftyReg
+  // defaults: 5 vs. 150; SyN/Demons converge in far fewer since they run
+  // in-process rather than as a CLI subprocess), so reset to a sensible
+  // starting point whenever the registration mode changes; still fully
+  // overridable below.
   useEffect(() => {
-    setMaxIterations(registrationType === "affine" ? 25 : 750);
+    setMaxIterations(REGISTRATION_METHODS[registrationType].iterations.default);
   }, [registrationType]);
 
   const loadSampleFile = async (url) => {
@@ -332,6 +346,9 @@ function App() {
       if (registrationType === "deformable") {
         formData.append("bending_energy", String(bendingEnergy));
         formData.append("grid_spacing", String(gridSpacing));
+      }
+      if (registrationType === "demons") {
+        formData.append("smoothing", String(demonsSmoothing));
       }
 
       const response = await fetch("http://localhost:8000/run-registration", {
@@ -617,34 +634,26 @@ function App() {
               <div className="registration-inline-settings">
                 <div className="registration-popover-title">Registration settings</div>
                 <div className="registration-type-options">
-                  <label className="radio-control">
-                    <input
-                      type="radio"
-                      name="registration-type"
-                      value="deformable"
-                      checked={registrationType === "deformable"}
-                      onChange={() => setRegistrationType("deformable")}
-                    />
-                    Deformable (reg_f3d)
-                  </label>
-                  <label className="radio-control">
-                    <input
-                      type="radio"
-                      name="registration-type"
-                      value="affine"
-                      checked={registrationType === "affine"}
-                      onChange={() => setRegistrationType("affine")}
-                    />
-                    Affine (reg_aladin)
-                  </label>
+                  {Object.entries(REGISTRATION_METHODS).map(([type, method]) => (
+                    <label className="radio-control" key={type}>
+                      <input
+                        type="radio"
+                        name="registration-type"
+                        value={type}
+                        checked={registrationType === type}
+                        onChange={() => setRegistrationType(type)}
+                      />
+                      {method.label}
+                    </label>
+                  ))}
                 </div>
                 <label className="popover-slider">
-                  Max iterations (per level): {maxIterations}
+                  Max iterations{registrationType === "deformable" || registrationType === "syn" ? " (per level)" : ""}: {maxIterations}
                   <input
                     type="range"
-                    min={registrationType === "affine" ? 5 : 50}
-                    max={registrationType === "affine" ? 200 : 2000}
-                    step={registrationType === "affine" ? 5 : 25}
+                    min={REGISTRATION_METHODS[registrationType].iterations.min}
+                    max={REGISTRATION_METHODS[registrationType].iterations.max}
+                    step={REGISTRATION_METHODS[registrationType].iterations.step}
                     value={maxIterations}
                     onChange={(e) => setMaxIterations(Number(e.target.value))}
                   />
@@ -674,6 +683,19 @@ function App() {
                       />
                     </label>
                   </>
+                )}
+                {registrationType === "demons" && (
+                  <label className="popover-slider">
+                    Smoothing (regularization): {demonsSmoothing.toFixed(1)}
+                    <input
+                      type="range"
+                      min="0.5"
+                      max="4"
+                      step="0.1"
+                      value={demonsSmoothing}
+                      onChange={(e) => setDemonsSmoothing(Number(e.target.value))}
+                    />
+                  </label>
                 )}
                 <div className="registration-popover-actions">
                   <button onClick={handleStartRegistration} disabled={!canRunRegistration}>

@@ -306,10 +306,11 @@ async def run_registration(
     bending_energy: float | None = Form(None),
     max_iterations: int | None = Form(None),
     grid_spacing: float | None = Form(None),
+    smoothing: float | None = Form(None),
 ):
     try:
         job_id, job_dir = registration.create_job(
-            registration_jobs_dir, registration_type, bending_energy, max_iterations, grid_spacing
+            registration_jobs_dir, registration_type, bending_energy, max_iterations, grid_spacing, smoothing
         )
         fixed_bytes = await fixed.read()
         moving_bytes = await moving.read()
