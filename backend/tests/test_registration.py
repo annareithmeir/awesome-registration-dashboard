@@ -62,12 +62,17 @@ def test_syn_registration_displacement_channel_order():
     # this app's convention (see registration.py's module docstring), which
     # is the *opposite* of ANTs' own field convention. moving is shifted
     # +6 columns, +4 rows relative to fixed, so the recovered field at the
-    # fixed square's location should point in that same direction.
+    # fixed square's location should point in that same direction. Averaged
+    # over the whole shifted region rather than sampled at a single point -
+    # SyN's optimizer isn't perfectly deterministic run to run (observed
+    # directly: the same single point can vary by several voxels between
+    # runs), and the region mean is consistently far more stable.
     fixed, moving, _ = _shifted_square_pair(shift=(4, 6))
     _, disp, _ = registration.run_syn_registration(fixed, moving, max_iterations=100)
 
-    center = tuple(s // 2 for s in fixed.shape)
-    dx, dy = disp[center]
+    lo = [s // 2 - 10 for s in fixed.shape]
+    hi = [s // 2 + 10 for s in fixed.shape]
+    dx, dy = disp[lo[0]:hi[0], lo[1]:hi[1]].mean(axis=(0, 1))
     assert dx == pytest.approx(6, abs=1.5)
     assert dy == pytest.approx(4, abs=1.5)
 

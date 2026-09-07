@@ -1,10 +1,50 @@
 import { useEffect, useRef, useState } from "react";
 import { rotateGrid } from "../utils/rotateGrid";
 
+// J <= 0: folding (non-invertible / orientation-reversing) - shared by both
+// topology color schemes below, checked first regardless of which is active.
+const FOLD_THRESHOLD = 1e-6;
+
+// The original discrete scheme: just folding / shrinking / preserved /
+// growing, one flat color each.
+const SIMPLE_PRESERVATION_BAND = 0.02;
+const SIMPLE_TOPOLOGY_BINS = [
+  { label: "Folding", color: [222, 82, 75], test: (j) => j <= FOLD_THRESHOLD },
+  { label: "Preservation", color: [94, 147, 236], test: (j) => Math.abs(j - 1) <= SIMPLE_PRESERVATION_BAND },
+  { label: "Shrinkage", color: [240, 164, 66], test: (j) => j < 1 },
+  { label: "Growth", color: [88, 196, 113], test: () => true },
+];
+
+// The graded scheme: same four concepts, but shrinkage and growth are each
+// further split into three intensity levels (light = mild, dark = severe),
+// so how MUCH a region changed is visible at a glance, not just whether it
+// grew or shrank. Bin edges are chosen so "a lot" and "slightly" read as
+// roughly the inverse of each other in each direction (e.g. 1.25 <-> 0.8,
+// 2.0 <-> 0.5) - checked in order, first match wins.
+const GRADED_PRESERVATION_BAND = 0.05;
+const GRADED_TOPOLOGY_BINS = [
+  { label: "Folding", color: [222, 82, 75], test: (j) => j <= FOLD_THRESHOLD },
+  { label: "Shrinking a lot", color: [191, 87, 0], test: (j) => j < 0.5 },
+  { label: "Shrinking", color: [255, 167, 38], test: (j) => j < 0.8 },
+  { label: "Shrinking slightly", color: [255, 224, 178], test: (j) => j < 1 - GRADED_PRESERVATION_BAND },
+  { label: "Preserved", color: [94, 147, 236], test: (j) => j <= 1 + GRADED_PRESERVATION_BAND },
+  { label: "Expanding slightly", color: [200, 230, 201], test: (j) => j <= 1.25 },
+  { label: "Expanding", color: [102, 187, 106], test: (j) => j <= 2 },
+  { label: "Expanding a lot", color: [27, 94, 32], test: () => true },
+];
+
+function classifyTopology(value, bins) {
+  for (const bin of bins) {
+    if (bin.test(value)) return bin;
+  }
+  return bins[bins.length - 1];
+}
+
 function JacobianViewer({ title, jacobian, rotation = 0 }) {
   const canvasRef = useRef(null);
   const [preview, setPreview] = useState(null);
   const [showTopology, setShowTopology] = useState(false);
+  const [showTopologyGraded, setShowTopologyGraded] = useState(false);
 
   useEffect(() => {
     setPreview(jacobian?.data ? jacobian : null);
@@ -29,10 +69,7 @@ function JacobianViewer({ title, jacobian, rotation = 0 }) {
     const minDet = Number.isFinite(preview.min) ? preview.min : null;
     const maxDet = Number.isFinite(preview.max) ? preview.max : null;
     const useTopology = showTopology;
-    // J <= 0: folding (non-invertible / orientation-reversing).
-    const foldThreshold = 1e-6;
-    // |J - 1| within this band counts as (approximately) volume-preserving.
-    const preservationBand = 0.02;
+    const topologyBins = showTopologyGraded ? GRADED_TOPOLOGY_BINS : SIMPLE_TOPOLOGY_BINS;
     const valueFromNormalized = (normalized) => {
       if (hasDetValues) return normalized;
       if (minDet !== null && maxDet !== null && maxDet !== minDet) {
@@ -53,27 +90,10 @@ function JacobianViewer({ title, jacobian, rotation = 0 }) {
             value = valueFromNormalized(normalized);
           }
 
-          if (value <= foldThreshold) {
-            // Folding: J <= 0
-            pixels[index] = 222;
-            pixels[index + 1] = 82;
-            pixels[index + 2] = 75;
-          } else if (Math.abs(value - 1) <= preservationBand) {
-            // Preservation: J == 1 (within a small tolerance)
-            pixels[index] = 94;
-            pixels[index + 1] = 147;
-            pixels[index + 2] = 236;
-          } else if (value < 1) {
-            // Shrinkage: 0 < J < 1
-            pixels[index] = 240;
-            pixels[index + 1] = 164;
-            pixels[index + 2] = 66;
-          } else {
-            // Growth: J > 1
-            pixels[index] = 88;
-            pixels[index + 1] = 196;
-            pixels[index + 2] = 113;
-          }
+          const bin = classifyTopology(value, topologyBins);
+          pixels[index] = bin.color[0];
+          pixels[index + 1] = bin.color[1];
+          pixels[index + 2] = bin.color[2];
           pixels[index + 3] = 255;
           continue;
         }
@@ -88,7 +108,9 @@ function JacobianViewer({ title, jacobian, rotation = 0 }) {
     }
 
     context.putImageData(imageData, 0, 0);
-  }, [preview, showTopology, rotation]);
+  }, [preview, showTopology, showTopologyGraded, rotation]);
+
+  const activeTopologyBins = showTopologyGraded ? GRADED_TOPOLOGY_BINS : SIMPLE_TOPOLOGY_BINS;
 
   return (
     <div className="viewer-card jacobian-viewer">
@@ -102,6 +124,19 @@ function JacobianViewer({ title, jacobian, rotation = 0 }) {
               <span className="toggle-slider" />
             </span>
           </label>
+          {showTopology && (
+            <label className="toggle-field">
+              <span className="toggle-field-label">Graded intensity</span>
+              <span className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={showTopologyGraded}
+                  onChange={(e) => setShowTopologyGraded(e.target.checked)}
+                />
+                <span className="toggle-slider" />
+              </span>
+            </label>
+          )}
         </div>
       </div>
       <div className="viewer-box">
@@ -111,23 +146,15 @@ function JacobianViewer({ title, jacobian, rotation = 0 }) {
             an identical-size preview area, and the images all line up. */}
         <div className="viewer-preview">
           {preview ? <canvas ref={canvasRef} className="preview-canvas" /> : "No jacobian preview yet"}
-          <div className={`jacobian-legend jacobian-legend-overlay ${showTopology ? "" : "jacobian-legend-hidden"}`}>
-            <div className="legend-item">
-              <span className="legend-swatch legend-negative" />
-              Folding
-            </div>
-            <div className="legend-item">
-              <span className="legend-swatch legend-shrinkage" />
-              Shrinkage
-            </div>
-            <div className="legend-item">
-              <span className="legend-swatch legend-zero" />
-              Preservation
-            </div>
-            <div className="legend-item">
-              <span className="legend-swatch legend-positive" />
-              Growth
-            </div>
+          <div
+            className={`jacobian-legend jacobian-legend-overlay ${showTopology ? "" : "jacobian-legend-hidden"} ${showTopologyGraded ? "jacobian-legend-graded" : ""}`}
+          >
+            {activeTopologyBins.map((bin) => (
+              <div className="legend-item" key={bin.label}>
+                <span className="legend-swatch" style={{ background: `rgb(${bin.color.join(",")})` }} />
+                {bin.label}
+              </div>
+            ))}
           </div>
         </div>
       </div>

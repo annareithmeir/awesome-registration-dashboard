@@ -202,6 +202,14 @@ button:disabled {
   font-weight: 700;
 }
 
+.save-results {
+  display: grid;
+  gap: 8px;
+  padding-top: 10px;
+  margin-top: 2px;
+  border-top: 1px solid rgba(148, 171, 183, 0.14);
+}
+
 .registration-type-options {
   display: grid;
   gap: 8px;
@@ -902,28 +910,20 @@ select {
   visibility: hidden;
 }
 
+/* The graded scheme has twice as many bins with longer labels ("Shrinking
+   a lot" vs "Shrinkage") - two columns instead of four gives each one room
+   to sit on a single line instead of wrapping. */
+.jacobian-legend-graded {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .legend-item {
   display: flex;
   align-items: center;
   gap: 8px;
   color: #91a8b3;
   font-size: 0.82rem;
-}
-
-.legend-negative {
-  background: #de524b;
-}
-
-.legend-zero {
-  background: #5e93ec;
-}
-
-.legend-shrinkage {
-  background: #f0a442;
-}
-
-.legend-positive {
-  background: #58c471;
+  white-space: nowrap;
 }
 
 .empty-state {

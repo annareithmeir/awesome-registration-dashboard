@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import JSZip from "jszip";
 import ImageViewer from "./components/ImageViewer";
 import DifferenceViewer from "./components/DifferenceViewer";
 import MetricPanel from "./components/MetricPanel";
@@ -303,6 +304,44 @@ function App() {
     } catch (error) {
       console.error("Sample load failed", error);
     }
+  };
+
+  // Same extension-detection convention the backend uses (see registration.py's
+  // _ext) - keeps a real .nii.gz intact instead of truncating it to just .gz.
+  const fileExtension = (file) => {
+    if (file.name.endsWith(".nii.gz")) return ".nii.gz";
+    const dot = file.name.lastIndexOf(".");
+    return dot >= 0 ? file.name.slice(dot) : "";
+  };
+
+  // Works for a result file regardless of where it came from - produced by
+  // an in-browser registration run (fetched from the backend into a File)
+  // or loaded directly from the user's own disk via "Load registered
+  // data" - since by this point both are just a File/Blob already sitting
+  // in state, not something that needs re-fetching.
+  const downloadFile = (file, filename) => {
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  // Bundled into one .zip rather than firing three separate downloadFile()
+  // calls back to back - browsers generally block or prompt-gate a script
+  // triggering more than one automatic download per click, so "download
+  // everything" needs to actually be one download to be reliable.
+  const handleDownloadAllResults = async () => {
+    const zip = new JSZip();
+    if (warpedFile) zip.file(`warped_image${fileExtension(warpedFile)}`, warpedFile);
+    if (warpedSegFile) zip.file(`warped_segmentation${fileExtension(warpedSegFile)}`, warpedSegFile);
+    if (dispFile) zip.file(`displacement_field${fileExtension(dispFile)}`, dispFile);
+    const blob = await zip.generateAsync({ type: "blob" });
+    downloadFile(blob, "registration_results.zip");
   };
 
   const pollRegistrationStatus = (jobId) =>
@@ -719,6 +758,37 @@ function App() {
               </div>
             )}
             {registrationError && <div className="sample-message error-message">{registrationError}</div>}
+
+            {(warpedFile || warpedSegFile || dispFile) && (
+              <div className="save-results">
+                <div className="registration-popover-title">Save results</div>
+                <button onClick={handleDownloadAllResults}>Download registration results</button>
+                {warpedFile && (
+                  <button
+                    className="secondary-action"
+                    onClick={() => downloadFile(warpedFile, `warped_image${fileExtension(warpedFile)}`)}
+                  >
+                    Download warped image
+                  </button>
+                )}
+                {warpedSegFile && (
+                  <button
+                    className="secondary-action"
+                    onClick={() => downloadFile(warpedSegFile, `warped_segmentation${fileExtension(warpedSegFile)}`)}
+                  >
+                    Download warped segmentation
+                  </button>
+                )}
+                {dispFile && (
+                  <button
+                    className="secondary-action"
+                    onClick={() => downloadFile(dispFile, `displacement_field${fileExtension(dispFile)}`)}
+                  >
+                    Download displacement field
+                  </button>
+                )}
+              </div>
+            )}
           </div>
           <button className="floating-menu-toggle" onClick={() => setActionMenuOpen((open) => !open)}>
             {actionMenuOpen ? "Close" : "Actions"}
