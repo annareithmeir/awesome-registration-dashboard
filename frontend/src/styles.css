@@ -113,6 +113,14 @@ input[type="file"]::file-selector-button {
   cursor: pointer;
 }
 
+/* All file inputs currently live inside the Data menu panel - tint the
+   "Choose File" chip with that menu's own accent instead of the site teal. */
+.floating-menu-panel input[type="file"]::file-selector-button {
+  border-color: color-mix(in srgb, var(--menu-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--menu-accent) 16%, transparent);
+  color: color-mix(in srgb, var(--menu-accent) 60%, white);
+}
+
 .button-panel {
   margin-bottom: 14px;
   padding: 14px;
@@ -223,6 +231,11 @@ button:disabled {
   color: #d9e7ec;
   font-size: 0.86rem;
   font-weight: 600;
+}
+
+.radio-control:has(input:disabled) {
+  color: #5b6b72;
+  cursor: not-allowed;
 }
 
 input[type="radio"] {
@@ -1072,26 +1085,51 @@ select {
   position: relative;
   display: grid;
   justify-items: end;
+  --menu-accent: #b075de;
+  --menu-accent-ink: #23103a;
+}
+
+/* Each menu gets its own accent, both in the same pinkish-purple family
+   (distinct from the site's dominant teal) but only subtly different from
+   each other - not two unrelated hues - so a panel still reads as clearly
+   "owned" by the button that opened it. Same --accent-driven pattern as
+   .metric-group's per-tile colors above. */
+.data-menu-group {
+  --menu-accent: #c26fd4;
+  --menu-accent-ink: #2a0e33;
+}
+
+.action-menu-group {
+  --menu-accent: #a179e8;
+  --menu-accent-ink: #1c1033;
 }
 
 .floating-menu-panel {
   position: absolute;
-  right: 0;
+  /* Panel's bottom-right corner sits up and to the left of the toggle
+     button's top-left corner, rather than flush with its top-right. */
+  right: calc(100% + 10px);
   bottom: calc(100% + 10px);
   display: grid;
   gap: 8px;
   width: 260px;
   padding: 10px;
-  border: 1px solid rgba(79, 214, 197, 0.22);
-  border-top: 2px solid #4fd6c5;
+  border: 1px solid color-mix(in srgb, var(--menu-accent) 30%, transparent);
+  border-top: 2px solid var(--menu-accent);
   border-radius: 10px;
   background: rgba(10, 19, 24, 0.92);
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.42), 0 0 32px rgba(79, 214, 197, 0.1);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.42), 0 0 32px color-mix(in srgb, var(--menu-accent) 16%, transparent);
   backdrop-filter: blur(16px);
   opacity: 0;
   pointer-events: none;
   transform: translateY(8px) scale(0.98);
   transition: opacity 140ms ease, transform 140ms ease;
+  /* Below .floating-menu-toggle (z-index 2) - the two floating-menu-groups
+     sit close together in .floating-corner, and an open panel can extend
+     upward far enough to cover the *other* group's toggle button. Keeping
+     toggles above panels means that button stays clickable (to switch
+     straight to it, closing this panel) no matter which panel is open. */
+  z-index: 1;
 }
 
 .floating-menu-open .floating-menu-panel {
@@ -1103,6 +1141,13 @@ select {
 .floating-menu-panel button {
   width: 100%;
   justify-content: center;
+  background: var(--menu-accent);
+  color: var(--menu-accent-ink);
+}
+
+.floating-menu-panel button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--menu-accent) 85%, white);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--menu-accent) 40%, transparent);
 }
 
 .data-menu-panel {
@@ -1140,6 +1185,20 @@ select {
   border-color: rgba(79, 214, 197, 0.4);
   transform: none;
   box-shadow: none;
+}
+
+/* Overrides the two rules above (and .floating-menu-panel button's solid
+   accent fill) with the owning menu's own accent, at a low, "outline
+   list item" strength rather than a filled button. */
+.floating-menu-panel .sample-set-option {
+  background: color-mix(in srgb, var(--menu-accent) 5%, transparent);
+  color: #d9e7ec;
+  border-color: color-mix(in srgb, var(--menu-accent) 24%, transparent);
+}
+
+.floating-menu-panel .sample-set-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--menu-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--menu-accent) 45%, transparent);
 }
 
 .sample-set-label {
@@ -1215,29 +1274,44 @@ select {
   background: rgba(79, 214, 197, 0.18);
 }
 
+/* Overrides the two rules above (and .floating-menu-panel button's solid
+   accent fill) with the owning menu's own accent, same tinted-outline
+   treatment as .sample-set-option above. */
+.floating-menu-panel .secondary-action {
+  border-color: color-mix(in srgb, var(--menu-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--menu-accent) 14%, transparent);
+  color: color-mix(in srgb, var(--menu-accent) 55%, white);
+}
+
+.floating-menu-panel .secondary-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--menu-accent) 24%, transparent);
+}
+
 .floating-menu-toggle {
+  position: relative;
+  z-index: 2;
   min-width: 112px;
-  border: 1px solid rgba(79, 214, 197, 0.4);
-  background: linear-gradient(135deg, #20a79b, #4fd6c5);
-  color: #04241f;
+  border: 1px solid color-mix(in srgb, var(--menu-accent) 55%, transparent);
+  background: linear-gradient(135deg, var(--menu-accent), color-mix(in srgb, var(--menu-accent) 55%, white));
+  color: var(--menu-accent-ink);
   font-weight: 800;
-  box-shadow: 0 16px 42px rgba(32, 167, 155, 0.36);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--menu-accent) 40%, transparent);
 }
 
 .floating-menu-toggle:hover:not(:disabled) {
-  background: linear-gradient(135deg, #27bfb2, #6fe9da);
-  box-shadow: 0 18px 48px rgba(32, 167, 155, 0.48);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--menu-accent) 85%, white), color-mix(in srgb, var(--menu-accent) 35%, white));
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--menu-accent) 52%, transparent);
 }
 
 .floating-menu-open .floating-menu-toggle {
-  background: #ffffff;
-  color: #082320;
-  border-color: rgba(79, 214, 197, 0.5);
+  background: color-mix(in srgb, var(--menu-accent) 22%, white);
+  color: var(--menu-accent-ink);
+  border-color: var(--menu-accent);
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.36);
 }
 
 .floating-menu-open .floating-menu-toggle:hover:not(:disabled) {
-  background: #ffffff;
+  background: color-mix(in srgb, var(--menu-accent) 34%, white);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
 }
 

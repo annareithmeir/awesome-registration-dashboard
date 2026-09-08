@@ -107,6 +107,75 @@ def test_demons_registration_warps_segmentation():
     assert dice > 0.9
 
 
+def _shifted_cube_pair(shape=(48, 40, 36), shift=(4, 0, 3)):
+    """3D analog of _shifted_square_pair above - ConvexAdam only supports 3D
+    volumes (see run_convexadam_registration's docstring), so it needs a
+    genuinely 3D test fixture rather than the 2D one the other methods use.
+    """
+    fixed = np.zeros(shape, dtype=np.float32)
+    moving = np.zeros(shape, dtype=np.float32)
+    moving_seg = np.zeros(shape, dtype=np.uint8)
+
+    lo = [s // 2 - 8 for s in shape]
+    hi = [s // 2 + 8 for s in shape]
+    fixed[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]] = 1.0
+
+    mlo = [lo[i] + shift[i] for i in range(3)]
+    mhi = [hi[i] + shift[i] for i in range(3)]
+    moving[mlo[0]:mhi[0], mlo[1]:mhi[1], mlo[2]:mhi[2]] = 1.0
+    moving_seg[mlo[0]:mhi[0], mlo[1]:mhi[1], mlo[2]:mhi[2]] = 1
+
+    return fixed, moving, moving_seg
+
+
+def test_convexadam_registration_recovers_synthetic_shift():
+    fixed, moving, _ = _shifted_cube_pair()
+    warped, disp, warped_seg = registration.run_convexadam_registration(fixed, moving, max_iterations=40)
+
+    assert warped.shape == fixed.shape
+    assert disp.shape == fixed.shape + (3,)
+    assert warped_seg is None
+
+    dice = processing.dice_score((warped > 0.5).astype(np.uint8), (fixed > 0.5).astype(np.uint8))
+    assert dice > 0.85
+
+
+def test_convexadam_registration_warps_segmentation():
+    fixed, moving, moving_seg = _shifted_cube_pair()
+    warped, disp, warped_seg = registration.run_convexadam_registration(
+        fixed, moving, moving_seg_arr=moving_seg, max_iterations=40
+    )
+
+    assert warped_seg is not None
+    assert warped_seg.shape == fixed.shape
+    assert set(np.unique(warped_seg).tolist()) <= {0, 1}
+    dice = processing.dice_score(warped_seg, (fixed > 0.5).astype(np.uint8))
+    assert dice > 0.85
+
+
+def test_convexadam_registration_displacement_channel_order():
+    # This app's convention is component i <-> spatial axis (N-1-i) (see
+    # registration.py's module docstring) - for a 3D field that's channel 0
+    # <-> axis 2, channel 1 <-> axis 1, channel 2 <-> axis 0. ConvexAdam's
+    # raw output uses the *opposite* convention (component i <-> axis i
+    # directly, same as ANTs), so run_convexadam_registration reverses it -
+    # this checks that reversal is actually in effect. moving is shifted
+    # +4 along axis 0 and +3 along axis 2, with axis 1 left unshifted, so the
+    # recovered field should show up in channels 2 and 0 respectively, and
+    # be ~flat in channel 1 - averaged over the shifted region rather than a
+    # single point for the same stability reasons as the SyN/Demons checks
+    # above.
+    fixed, moving, _ = _shifted_cube_pair(shift=(4, 0, 3))
+    _, disp, _ = registration.run_convexadam_registration(fixed, moving, max_iterations=40)
+
+    lo = [s // 2 - 8 for s in fixed.shape]
+    hi = [s // 2 + 8 for s in fixed.shape]
+    d0, d1, d2 = disp[lo[0]:hi[0], lo[1]:hi[1], lo[2]:hi[2]].mean(axis=(0, 1, 2))
+    assert d2 == pytest.approx(4, abs=1.5)
+    assert d1 == pytest.approx(0, abs=1.0)
+    assert d0 == pytest.approx(3, abs=1.5)
+
+
 def test_demons_registration_displacement_channel_order():
     # Same convention check as SyN above, but for SimpleITK's field, which
     # (unlike ANTs') already matches this app's convention with no

@@ -1,6 +1,6 @@
 """Background registration jobs with time-estimated progress.
 
-Four methods, in two architectural families:
+Five methods, in three architectural families:
 
 - affine (NiftyReg reg_aladin) and deformable (NiftyReg reg_f3d) shell out
   to the NiftyReg CLI tools as a subprocess, same as before.
@@ -8,6 +8,10 @@ Four methods, in two architectural families:
   there's no CLI to shell out to, and both libraries are heavy optional
   dependencies, so they're imported lazily inside run_syn_registration /
   run_demons_registration rather than at module load time.
+- convexadam (MIND-SSC features + coupled convex optimization + Adam
+  instance-optimization refinement, via the convexAdam package) also runs
+  in-process. Unlike the other methods it's 3D-only - it unpacks exactly
+  (H, W, D) - so it's gated to 3D data in the UI.
 
 Displacement field channel-order convention: this app's `.pt` files use
 component i <-> spatial axis (N-1-i) - e.g. for a 2D field, channel 0 is the
@@ -17,7 +21,10 @@ assumes). ANTs' own displacement fields use the *opposite* convention
 (component i <-> spatial axis i directly), verified empirically with a
 hand-constructed known transform - see run_syn_registration for the fix.
 SimpleITK's fields already match this app's convention directly, verified
-the same way - see run_demons_registration.
+the same way - see run_demons_registration. ConvexAdam's raw output uses the
+same convention as ANTs (component i <-> spatial axis i directly, verified
+the same way with a hand-constructed known shift) - see
+run_convexadam_registration.
 """
 import os
 import shutil
@@ -57,6 +64,11 @@ DEMONS_DEFAULT_ITERATIONS = 50
 # field each iteration - Demons' only regularization knob, playing the same
 # role reg_f3d's bending energy does (higher = smoother/stiffer).
 DEMONS_DEFAULT_SMOOTHING = 1.5
+# ConvexAdam's own default (the package's Adam instance-optimization step
+# count on top of the coupled-convex initialization). 0 skips that step
+# entirely and falls back to the coupled-convex result alone - see
+# run_convexadam_registration.
+CONVEXADAM_DEFAULT_ITERATIONS = 80
 
 # Per-phase metadata. `weight` is the fraction of overall progress this phase
 # accounts for (within whichever phase set actually runs); `expected` is a
@@ -70,11 +82,12 @@ PHASE_DEFS = {
     "deformable": {"label": "Running deformable registration (reg_f3d)…", "weight": 0.75, "expected": 70.0},
     "syn": {"label": "Running SyN registration (ANTs)…", "weight": 0.75, "expected": 3.0},
     "demons": {"label": "Running Demons registration (SimpleITK)…", "weight": 0.6, "expected": 1.5},
+    "convexadam": {"label": "Running ConvexAdam registration…", "weight": 0.6, "expected": 5.0},
     "field": {"label": "Computing displacement field…", "weight": 0.08, "expected": 1.5},
     "segmentation": {"label": "Resampling segmentation…", "weight": 0.17, "expected": 2.5},
 }
 
-REGISTRATION_TYPES = ("affine", "deformable", "syn", "demons")
+REGISTRATION_TYPES = ("affine", "deformable", "syn", "demons", "convexadam")
 
 _JOBS = {}
 _JOBS_LOCK = threading.Lock()
@@ -383,6 +396,55 @@ def run_demons_registration(fixed_arr, moving_arr, moving_seg_arr=None, iteratio
     return warped_arr, disp_arr, warped_seg_arr
 
 
+def run_convexadam_registration(fixed_arr, moving_arr, moving_seg_arr=None, max_iterations=None):
+    """ConvexAdam registration, run in-process. Returns (warped_arr,
+    displacement_arr, warped_seg_arr), same shape as run_syn_registration /
+    run_demons_registration above.
+
+    Unlike uniGradICon, this isn't a pretrained network - it's a from-scratch
+    per-pair classical optimization (like SyN/Demons): MIND-SSC hand-crafted
+    features, a discrete coupled-convex optimization for a coarse field, then
+    an optional Adam-based instance-optimization refinement. 3D only - the
+    package itself unpacks exactly (H, W, D), no 2D path.
+    """
+    from convexAdam.convex_adam_MIND import convex_adam_pt  # deferred: heavy optional dependency
+    from scipy.ndimage import map_coordinates
+
+    fixed_arr = np.asarray(fixed_arr, dtype=np.float32)
+    moving_arr = np.asarray(moving_arr, dtype=np.float32)
+    if fixed_arr.ndim != 3:
+        raise RegistrationError("ConvexAdam only supports 3D volumes")
+
+    niter = int(max_iterations if max_iterations is not None else CONVEXADAM_DEFAULT_ITERATIONS)
+    # lambda_weight=0 skips the Adam refinement step entirely and falls back
+    # to the coupled-convex result alone - keep it at the package's own
+    # default weight whenever a nonzero iteration count was requested.
+    lambda_weight = 1.25 if niter > 0 else 0.0
+
+    raw_disp = convex_adam_pt(fixed_arr, moving_arr, selected_niter=niter, lambda_weight=lambda_weight)
+    # raw_disp has shape (H, W, D, 3) with component i <-> spatial axis i
+    # directly (verified empirically, same convention as ANTs - see module
+    # docstring) - reverse it for the field this app saves/displays.
+    disp_arr = raw_disp[..., ::-1].astype(np.float32)
+
+    # ConvexAdam doesn't return a composed warp - warp with the raw
+    # (unreversed) displacement using the same scipy map_coordinates approach
+    # as the package's own apply_convex() helper, so warping stays in the
+    # library's native convention and doesn't need a second reversal.
+    H, W, D = raw_disp.shape[:3]
+    identity = np.meshgrid(np.arange(H), np.arange(W), np.arange(D), indexing="ij")
+    sample_coords = raw_disp.transpose(3, 0, 1, 2) + identity
+
+    warped_arr = map_coordinates(moving_arr, sample_coords, order=1).astype(np.float32)
+
+    warped_seg_arr = None
+    if moving_seg_arr is not None:
+        moving_seg_arr = np.asarray(moving_seg_arr, dtype=np.float32)
+        warped_seg_arr = np.rint(map_coordinates(moving_seg_arr, sample_coords, order=0)).astype(np.uint8)
+
+    return warped_arr, disp_arr, warped_seg_arr
+
+
 def _run_inprocess_pipeline(job_id, job, fixed_path, moving_path, moving_seg_path, job_dir, phase_key, run_fn):
     _enter_phase(job_id, phase_key)
     fixed_arr = _load_array(fixed_path)
@@ -435,6 +497,14 @@ def _run_pipeline(job_id, fixed_path, moving_path, moving_seg_path):
                     fixed_arr, moving_arr, seg_arr,
                     iterations=job.get("max_iterations"),
                     smoothing=job.get("smoothing"),
+                ),
+            )
+        elif registration_type == "convexadam":
+            warped_path, disp_pt, warped_seg_path = _run_inprocess_pipeline(
+                job_id, job, fixed_path, moving_path, moving_seg_path, job_dir,
+                phase_key="convexadam",
+                run_fn=lambda fixed_arr, moving_arr, seg_arr: run_convexadam_registration(
+                    fixed_arr, moving_arr, seg_arr, max_iterations=job.get("max_iterations")
                 ),
             )
         else:
