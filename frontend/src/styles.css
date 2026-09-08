@@ -1081,7 +1081,9 @@ select {
 
 .floating-menu-panel {
   position: absolute;
-  right: 0;
+  /* Panel's bottom-right corner sits up and to the left of the toggle
+     button's top-left corner, rather than flush with its top-right. */
+  right: calc(100% + 10px);
   bottom: calc(100% + 10px);
   display: grid;
   gap: 8px;
