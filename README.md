@@ -2,7 +2,7 @@
 
 # Awesome Image Registration Dashboard
 
-Load two scans, register them, and see exactly how well it worked — down to the last voxel.
+Run registrations or load already registered data and discover different evaluation metrics.
 
 A local web app for running and inspecting medical image registration: load a fixed/moving pair (2D or 3D NIfTI), register them with any of five methods, and drill into the result with per-structure overlap metrics, Jacobian/topology diagnostics, and a displacement-field visualizer — no notebook required.
 

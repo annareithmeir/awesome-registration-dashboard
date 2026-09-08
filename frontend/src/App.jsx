@@ -474,7 +474,7 @@ function App() {
     <div className="app-shell">
       <header>
         <h1>Awesome Image Registration Dashboard</h1>
-        <p>Load two scans, register them, and see exactly how well it worked — down to the last voxel.</p>
+        <p>Run registrations or load already registered data and discover different evaluation metrics.</p>
       </header>
 
       {(fixedFile || movingFile) && (
