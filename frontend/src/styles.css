@@ -1097,6 +1097,12 @@ select {
   pointer-events: none;
   transform: translateY(8px) scale(0.98);
   transition: opacity 140ms ease, transform 140ms ease;
+  /* Below .floating-menu-toggle (z-index 2) - the two floating-menu-groups
+     sit close together in .floating-corner, and an open panel can extend
+     upward far enough to cover the *other* group's toggle button. Keeping
+     toggles above panels means that button stays clickable (to switch
+     straight to it, closing this panel) no matter which panel is open. */
+  z-index: 1;
 }
 
 .floating-menu-open .floating-menu-panel {
@@ -1221,6 +1227,8 @@ select {
 }
 
 .floating-menu-toggle {
+  position: relative;
+  z-index: 2;
   min-width: 112px;
   border: 1px solid rgba(79, 214, 197, 0.4);
   background: linear-gradient(135deg, #20a79b, #4fd6c5);

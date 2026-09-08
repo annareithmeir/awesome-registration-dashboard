@@ -104,6 +104,17 @@ function App() {
   const canRunRegistration = Boolean(fixedFile && movingFile) && !registrationRunning;
   const selectedMethodUnavailable = REGISTRATION_METHODS[registrationType].requires3D && !canUseSliceSlider;
 
+  // Only one of the two floating menus (Data / Actions) should be open at
+  // once - opening one closes the other if it was still open.
+  const toggleDataMenu = () => {
+    setDataMenuOpen((open) => !open);
+    setActionMenuOpen(false);
+  };
+  const toggleActionMenu = () => {
+    setActionMenuOpen((open) => !open);
+    setDataMenuOpen(false);
+  };
+
   const handleSliceChange = (value) => {
     setSliceIndex(value);
     setGlobalSliceIndex(value);
@@ -660,7 +671,7 @@ function App() {
               </>
             )}
           </div>
-          <button className="floating-menu-toggle" onClick={() => setDataMenuOpen((open) => !open)}>
+          <button className="floating-menu-toggle" onClick={toggleDataMenu}>
             {dataMenuOpen ? "Close" : "Data"}
           </button>
         </div>
@@ -800,7 +811,7 @@ function App() {
               </div>
             )}
           </div>
-          <button className="floating-menu-toggle" onClick={() => setActionMenuOpen((open) => !open)}>
+          <button className="floating-menu-toggle" onClick={toggleActionMenu}>
             {actionMenuOpen ? "Close" : "Actions"}
           </button>
         </div>
