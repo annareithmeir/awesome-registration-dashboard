@@ -58,7 +58,7 @@ const REGISTRATION_METHODS = {
   deformable: { label: "Deformable (reg_f3d)", iterations: { min: 50, max: 2000, step: 25, default: 750 } },
   syn: { label: "SyN (ANTs)", iterations: { min: 10, max: 300, step: 10, default: 100 } },
   demons: { label: "Demons (SimpleITK)", iterations: { min: 10, max: 200, step: 10, default: 50 } },
-  convexadam: { label: "ConvexAdam", iterations: { min: 0, max: 200, step: 10, default: 80 }, requires3D: true },
+  convexadam: { label: "ConvexAdam (3D only)", iterations: { min: 0, max: 200, step: 10, default: 80 }, requires3D: true },
 };
 
 function App() {

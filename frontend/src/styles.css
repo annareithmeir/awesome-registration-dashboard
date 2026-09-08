@@ -225,6 +225,11 @@ button:disabled {
   font-weight: 600;
 }
 
+.radio-control:has(input:disabled) {
+  color: #5b6b72;
+  cursor: not-allowed;
+}
+
 input[type="radio"] {
   width: 15px;
   height: 15px;
