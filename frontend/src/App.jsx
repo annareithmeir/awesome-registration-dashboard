@@ -473,7 +473,10 @@ function App() {
   return (
     <div className="app-shell">
       <header>
-        <h1>Awesome Image Registration Dashboard</h1>
+        <div className="header-title">
+          <img src="/registration_app_icon.svg" alt="" className="app-icon" />
+          <h1>Awesome Image Registration Dashboard</h1>
+        </div>
         <p>Run registrations or load already registered data and discover different evaluation metrics.</p>
       </header>
 
