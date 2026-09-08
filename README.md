@@ -1,4 +1,4 @@
-![Awesome Image Registration Dashboard](app-screenshot.png)
+![Awesome Image Registration Dashboard](demo.gif)
 
 # Awesome Image Registration Dashboard
 
