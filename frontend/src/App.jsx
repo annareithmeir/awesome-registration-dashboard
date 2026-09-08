@@ -477,9 +477,11 @@ function App() {
         <p>Load two scans, register them, and see exactly how well it worked — down to the last voxel.</p>
       </header>
 
-      <section className="metrics-row">
-        <MetricPanel metrics={metrics} metricsBefore={metricsBefore} jacobian={jacobian} />
-      </section>
+      {(fixedFile || movingFile) && (
+        <section className="metrics-row">
+          <MetricPanel metrics={metrics} metricsBefore={metricsBefore} jacobian={jacobian} />
+        </section>
+      )}
 
       <section className="viewer-row main-viewers-row">
         <ImageViewer
