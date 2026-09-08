@@ -1,6 +1,7 @@
 /.pytest_cache
 /.venv
 /backend/registration_jobs
+/backend/model_weights
 /backend/__pycache__
 /backend/app/__pycache__
 /backend/.pytest_cache
