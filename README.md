@@ -4,20 +4,26 @@
 
 Load two scans, register them, and see exactly how well it worked — down to the last voxel.
 
-A local web app for running and inspecting medical image registration: load a fixed/moving pair (2D or 3D NIfTI), run affine or deformable registration in the browser, and drill into the result with per-structure overlap metrics, Jacobian/topology diagnostics, and a displacement-field visualizer — no notebook required.
+A local web app for running and inspecting medical image registration: load a fixed/moving pair (2D or 3D NIfTI), register them with any of five methods, and drill into the result with per-structure overlap metrics, Jacobian/topology diagnostics, and a displacement-field visualizer — no notebook required.
 
 ## Features
 
 - **Load anything, or start from a sample.** Upload fixed/moving images and segmentations (`.nii` / `.nii.gz`), or pick a bundled sample set to explore the app immediately — a synthetic 2D expand/shrink pair, plus optional real 2D/3D cardiac MRI and lung CT sets you can generate locally (see [Sample data](#sample-data)).
-- **Run registration in-browser.** Affine (`reg_aladin`) or deformable (`reg_f3d`) registration via [NiftyReg](https://github.com/KCL-BMEIS/niftyreg), with tunable iterations, regularization weight, and control-point spacing — or load an already-registered warped image + displacement field from elsewhere.
+- **Five registration methods, run in-browser:**
+  - Affine (`reg_aladin`) and deformable (`reg_f3d`) via [NiftyReg](https://github.com/KCL-BMEIS/niftyreg), with tunable iterations, regularization weight, and control-point spacing.
+  - SyN via [ANTs](https://github.com/ANTsX/ANTsPy), with tunable iterations.
+  - Demons via [SimpleITK](https://simpleitk.org/), with tunable iterations and smoothing.
+  - ConvexAdam (MIND-SSC features + coupled convex optimization + optional Adam instance-optimization refinement), 3D volumes only.
+  - Or skip registration entirely and load an already-registered warped image + displacement field from elsewhere.
 - **Full 3D navigation.** Scrub through slices with the floating slider or the mouse wheel, switch between sagittal/coronal/axial planes, and rotate the current view 90° — all in sync across every open viewer.
 - **Segmentation overlay.** Toggle any image between raw intensities and its segmentation, with an adjustable overlay opacity.
 - **Registration-quality metrics, not just a warped image:**
-  - Dice, Dice95, Hausdorff, and Hausdorff95 — overall and per structure, before vs. after registration.
-  - Jacobian determinant, with automatic folding/topology-preservation detection.
+  - Dice, Dice30 (30th percentile across a volume's per-slice Dice scores — a stricter summary than a single whole-volume average), Hausdorff, and Hausdorff95 — overall and per structure, before vs. after registration.
+  - Jacobian determinant, with automatic folding/topology-preservation detection and a graded (binned by how strongly a region is expanding/shrinking) topology-change color map.
   - Log-Jacobian (symmetric growth/shrinkage), Shear Index, and Inverse Consistency Error, each with its own heatmap.
 - **Displacement field visualization** — warped grid overlay and a hue/brightness color wheel encoding direction and magnitude.
 - **Difference image** between fixed vs. moving or fixed vs. warped, to spot misregistration at a glance.
+- **Save & export results.** Download the warped image, warped segmentation, or displacement field individually, or bundle all three into one `.zip` with a single click.
 
 ## Setup
 
@@ -31,7 +37,7 @@ source .venv/bin/activate
 pip install -r backend/requirements.txt
 ```
 
-Registration additionally requires the [NiftyReg](https://github.com/KCL-BMEIS/niftyreg) command-line tools (`reg_aladin`, `reg_f3d`, `reg_resample`, `reg_transform`) — `pip install niftyreg` builds them for you, or install NiftyReg separately and make sure it's on `PATH`. Everything else (loading images, viewing metrics) works without it.
+SyN, Demons, and ConvexAdam all run in-process and need nothing beyond `pip install -r backend/requirements.txt`. Affine and deformable registration additionally require the [NiftyReg](https://github.com/KCL-BMEIS/niftyreg) command-line tools (`reg_aladin`, `reg_f3d`, `reg_resample`, `reg_transform`) — `pip install niftyreg` builds them for you, or install NiftyReg separately and make sure it's on `PATH`. Everything else (loading images, viewing metrics, the other three registration methods) works without it.
 
 ### Frontend
 
@@ -82,5 +88,5 @@ pytest
 
 ## Acknowledgments
 
-- [NiftyReg](https://github.com/KCL-BMEIS/niftyreg) for the registration engine.
+- [NiftyReg](https://github.com/KCL-BMEIS/niftyreg), [ANTs](https://github.com/ANTsX/ANTsPy), [SimpleITK](https://simpleitk.org/), and [ConvexAdam](https://github.com/multimodallearning/convexAdam) for the registration engines.
 - [ACDC Challenge](https://www.creatis.insa-lyon.fr/Challenge/acdc/) and [Learn2Reg](https://learn2reg.grand-challenge.org/) for the real-data sample generators.
