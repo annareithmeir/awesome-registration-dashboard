@@ -3,6 +3,8 @@
 - let user easily add own method
 - save results
 - compare across different runs
+- labelwise metrics and deforation field metrics in spider plots compared with before
+
 
 ow, 10 ideas for where I'd take this next — grounded in things I actually ran into while working on it, not generic suggestions:
 
