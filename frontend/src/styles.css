@@ -47,8 +47,8 @@ header {
 }
 
 .app-icon {
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   flex-shrink: 0;
 }
 
