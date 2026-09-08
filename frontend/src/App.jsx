@@ -598,7 +598,7 @@ function App() {
             </label>
           </div>
         )}
-        <div className={`floating-menu-group ${dataMenuOpen ? "floating-menu-open" : ""}`}>
+        <div className={`floating-menu-group data-menu-group ${dataMenuOpen ? "floating-menu-open" : ""}`}>
           <div className="floating-menu-panel data-menu-panel" aria-hidden={!dataMenuOpen}>
             <button className="secondary-action data-menu-span" onClick={handleOpenSamplePicker}>
               {showSamplePicker ? "Hide sample data" : "Load sample data"}
@@ -676,7 +676,7 @@ function App() {
           </button>
         </div>
 
-        <div className={`floating-menu-group ${actionMenuOpen ? "floating-menu-open" : ""}`}>
+        <div className={`floating-menu-group action-menu-group ${actionMenuOpen ? "floating-menu-open" : ""}`}>
           <div className="floating-menu-panel" aria-hidden={!actionMenuOpen}>
             <button onClick={() => setShowRegistrationOptions((open) => !open)} disabled={!canRunRegistration}>
               {registrationRunning ? "Running registration…" : "Run registration"}

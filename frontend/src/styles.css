@@ -1077,6 +1077,22 @@ select {
   position: relative;
   display: grid;
   justify-items: end;
+  --menu-accent: #4fd6c5;
+  --menu-accent-ink: #04241f;
+}
+
+/* Each menu gets its own accent, distinct from the site's dominant teal and
+   from each other, so a panel is clearly "owned" by the button that opened
+   it - amber for Data, violet for Actions. Same --accent-driven pattern as
+   .metric-group's per-tile colors above. */
+.data-menu-group {
+  --menu-accent: #f0a83d;
+  --menu-accent-ink: #241505;
+}
+
+.action-menu-group {
+  --menu-accent: #8b6bf0;
+  --menu-accent-ink: #17102e;
 }
 
 .floating-menu-panel {
@@ -1089,11 +1105,11 @@ select {
   gap: 8px;
   width: 260px;
   padding: 10px;
-  border: 1px solid rgba(79, 214, 197, 0.22);
-  border-top: 2px solid #4fd6c5;
+  border: 1px solid color-mix(in srgb, var(--menu-accent) 30%, transparent);
+  border-top: 2px solid var(--menu-accent);
   border-radius: 10px;
   background: rgba(10, 19, 24, 0.92);
-  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.42), 0 0 32px rgba(79, 214, 197, 0.1);
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.42), 0 0 32px color-mix(in srgb, var(--menu-accent) 16%, transparent);
   backdrop-filter: blur(16px);
   opacity: 0;
   pointer-events: none;
@@ -1232,27 +1248,27 @@ select {
   position: relative;
   z-index: 2;
   min-width: 112px;
-  border: 1px solid rgba(79, 214, 197, 0.4);
-  background: linear-gradient(135deg, #20a79b, #4fd6c5);
-  color: #04241f;
+  border: 1px solid color-mix(in srgb, var(--menu-accent) 55%, transparent);
+  background: linear-gradient(135deg, var(--menu-accent), color-mix(in srgb, var(--menu-accent) 55%, white));
+  color: var(--menu-accent-ink);
   font-weight: 800;
-  box-shadow: 0 16px 42px rgba(32, 167, 155, 0.36);
+  box-shadow: 0 16px 42px color-mix(in srgb, var(--menu-accent) 40%, transparent);
 }
 
 .floating-menu-toggle:hover:not(:disabled) {
-  background: linear-gradient(135deg, #27bfb2, #6fe9da);
-  box-shadow: 0 18px 48px rgba(32, 167, 155, 0.48);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--menu-accent) 85%, white), color-mix(in srgb, var(--menu-accent) 35%, white));
+  box-shadow: 0 18px 48px color-mix(in srgb, var(--menu-accent) 52%, transparent);
 }
 
 .floating-menu-open .floating-menu-toggle {
-  background: #ffffff;
-  color: #082320;
-  border-color: rgba(79, 214, 197, 0.5);
+  background: color-mix(in srgb, var(--menu-accent) 22%, white);
+  color: var(--menu-accent-ink);
+  border-color: var(--menu-accent);
   box-shadow: 0 16px 42px rgba(0, 0, 0, 0.36);
 }
 
 .floating-menu-open .floating-menu-toggle:hover:not(:disabled) {
-  background: #ffffff;
+  background: color-mix(in srgb, var(--menu-accent) 34%, white);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
 }
 
