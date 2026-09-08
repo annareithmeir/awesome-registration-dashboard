@@ -9,4 +9,5 @@ scikit-image==0.26.0
 niftyreg==1.5.70rc1
 SimpleITK==2.5.6
 antspyx==0.6.3
+convexAdam==0.2.0
 pytest>=8.0.0

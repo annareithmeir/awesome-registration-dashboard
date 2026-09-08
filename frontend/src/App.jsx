@@ -58,6 +58,7 @@ const REGISTRATION_METHODS = {
   deformable: { label: "Deformable (reg_f3d)", iterations: { min: 50, max: 2000, step: 25, default: 750 } },
   syn: { label: "SyN (ANTs)", iterations: { min: 10, max: 300, step: 10, default: 100 } },
   demons: { label: "Demons (SimpleITK)", iterations: { min: 10, max: 200, step: 10, default: 50 } },
+  convexadam: { label: "ConvexAdam", iterations: { min: 0, max: 200, step: 10, default: 80 }, requires3D: true },
 };
 
 function App() {
@@ -101,6 +102,7 @@ function App() {
   const canUseSliceSlider = fixedIs3D && movingIs3D;
   const maxSliceIndex = Math.max(0, Math.min(fixedSliceCount, movingSliceCount) - 1);
   const canRunRegistration = Boolean(fixedFile && movingFile) && !registrationRunning;
+  const selectedMethodUnavailable = REGISTRATION_METHODS[registrationType].requires3D && !canUseSliceSlider;
 
   const handleSliceChange = (value) => {
     setSliceIndex(value);
@@ -369,7 +371,7 @@ function App() {
     });
 
   const handleStartRegistration = async () => {
-    if (!canRunRegistration) return;
+    if (!canRunRegistration || selectedMethodUnavailable) return;
     setShowRegistrationOptions(false);
     setRegistrationRunning(true);
     setRegistrationError(null);
@@ -673,18 +675,26 @@ function App() {
               <div className="registration-inline-settings">
                 <div className="registration-popover-title">Registration settings</div>
                 <div className="registration-type-options">
-                  {Object.entries(REGISTRATION_METHODS).map(([type, method]) => (
-                    <label className="radio-control" key={type}>
-                      <input
-                        type="radio"
-                        name="registration-type"
-                        value={type}
-                        checked={registrationType === type}
-                        onChange={() => setRegistrationType(type)}
-                      />
-                      {method.label}
-                    </label>
-                  ))}
+                  {Object.entries(REGISTRATION_METHODS).map(([type, method]) => {
+                    const unavailable = method.requires3D && !canUseSliceSlider;
+                    return (
+                      <label
+                        className="radio-control"
+                        key={type}
+                        title={unavailable ? "Needs 3D fixed and moving volumes" : undefined}
+                      >
+                        <input
+                          type="radio"
+                          name="registration-type"
+                          value={type}
+                          checked={registrationType === type}
+                          disabled={unavailable}
+                          onChange={() => setRegistrationType(type)}
+                        />
+                        {method.label}
+                      </label>
+                    );
+                  })}
                 </div>
                 <label className="popover-slider">
                   Max iterations{registrationType === "deformable" || registrationType === "syn" ? " (per level)" : ""}: {maxIterations}
@@ -737,7 +747,7 @@ function App() {
                   </label>
                 )}
                 <div className="registration-popover-actions">
-                  <button onClick={handleStartRegistration} disabled={!canRunRegistration}>
+                  <button onClick={handleStartRegistration} disabled={!canRunRegistration || selectedMethodUnavailable}>
                     Start registration
                   </button>
                   <button className="secondary-action" onClick={() => setShowRegistrationOptions(false)}>
