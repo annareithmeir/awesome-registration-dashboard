@@ -1,4 +1,4 @@
-![Awesome Image Registration Dashboard](demo.gif)
+<img src="demo.gif" alt="Awesome Image Registration Dashboard" width="100%">
 
 # Awesome Image Registration Dashboard
 
