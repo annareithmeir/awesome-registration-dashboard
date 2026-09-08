@@ -113,6 +113,14 @@ input[type="file"]::file-selector-button {
   cursor: pointer;
 }
 
+/* All file inputs currently live inside the Data menu panel - tint the
+   "Choose File" chip with that menu's own accent instead of the site teal. */
+.floating-menu-panel input[type="file"]::file-selector-button {
+  border-color: color-mix(in srgb, var(--menu-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--menu-accent) 16%, transparent);
+  color: color-mix(in srgb, var(--menu-accent) 60%, white);
+}
+
 .button-panel {
   margin-bottom: 14px;
   padding: 14px;
@@ -1077,22 +1085,23 @@ select {
   position: relative;
   display: grid;
   justify-items: end;
-  --menu-accent: #4fd6c5;
-  --menu-accent-ink: #04241f;
+  --menu-accent: #b075de;
+  --menu-accent-ink: #23103a;
 }
 
-/* Each menu gets its own accent, distinct from the site's dominant teal and
-   from each other, so a panel is clearly "owned" by the button that opened
-   it - amber for Data, violet for Actions. Same --accent-driven pattern as
+/* Each menu gets its own accent, both in the same pinkish-purple family
+   (distinct from the site's dominant teal) but only subtly different from
+   each other - not two unrelated hues - so a panel still reads as clearly
+   "owned" by the button that opened it. Same --accent-driven pattern as
    .metric-group's per-tile colors above. */
 .data-menu-group {
-  --menu-accent: #f0a83d;
-  --menu-accent-ink: #241505;
+  --menu-accent: #c26fd4;
+  --menu-accent-ink: #2a0e33;
 }
 
 .action-menu-group {
-  --menu-accent: #8b6bf0;
-  --menu-accent-ink: #17102e;
+  --menu-accent: #a179e8;
+  --menu-accent-ink: #1c1033;
 }
 
 .floating-menu-panel {
@@ -1132,6 +1141,13 @@ select {
 .floating-menu-panel button {
   width: 100%;
   justify-content: center;
+  background: var(--menu-accent);
+  color: var(--menu-accent-ink);
+}
+
+.floating-menu-panel button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--menu-accent) 85%, white);
+  box-shadow: 0 8px 22px color-mix(in srgb, var(--menu-accent) 40%, transparent);
 }
 
 .data-menu-panel {
@@ -1169,6 +1185,20 @@ select {
   border-color: rgba(79, 214, 197, 0.4);
   transform: none;
   box-shadow: none;
+}
+
+/* Overrides the two rules above (and .floating-menu-panel button's solid
+   accent fill) with the owning menu's own accent, at a low, "outline
+   list item" strength rather than a filled button. */
+.floating-menu-panel .sample-set-option {
+  background: color-mix(in srgb, var(--menu-accent) 5%, transparent);
+  color: #d9e7ec;
+  border-color: color-mix(in srgb, var(--menu-accent) 24%, transparent);
+}
+
+.floating-menu-panel .sample-set-option:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--menu-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--menu-accent) 45%, transparent);
 }
 
 .sample-set-label {
@@ -1242,6 +1272,19 @@ select {
 
 .secondary-action:hover:not(:disabled) {
   background: rgba(79, 214, 197, 0.18);
+}
+
+/* Overrides the two rules above (and .floating-menu-panel button's solid
+   accent fill) with the owning menu's own accent, same tinted-outline
+   treatment as .sample-set-option above. */
+.floating-menu-panel .secondary-action {
+  border-color: color-mix(in srgb, var(--menu-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--menu-accent) 14%, transparent);
+  color: color-mix(in srgb, var(--menu-accent) 55%, white);
+}
+
+.floating-menu-panel .secondary-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--menu-accent) 24%, transparent);
 }
 
 .floating-menu-toggle {
