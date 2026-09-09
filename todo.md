@@ -1,7 +1,6 @@
-- add register with unigrad, choose sim (for multimodal), convexadam, demons simpleitk, syn, elastix
+- add register with unigrad, choose sim (for multimodal), elastix
 - add zoom
 - let user easily add own method
-- save results
 - compare across different runs
 - labelwise metrics and deforation field metrics in spider plots compared with before
 

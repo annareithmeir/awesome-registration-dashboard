@@ -1,4 +1,4 @@
-<img src="demo.gif" alt="Awesome Image Registration Dashboard" width="100%">
+<img src="demo_compressed.gif" alt="Awesome Image Registration Dashboard" width="50%">
 
 # Awesome Image Registration Dashboard
 
