@@ -1,7 +1,5 @@
-<video src="https://github.com/annareithmeir/awesome-registration-dashboard/blob/main/demo_2x.mp4"
-       controls
-       width="80%">
-</video>
+
+https://github.com/user-attachments/assets/b6386d0e-6c62-4477-9bd6-207b3649b596
 
 # :sparkles: Awesome Image Registration Dashboard :sparkles:
 
