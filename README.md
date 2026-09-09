@@ -1,5 +1,5 @@
 
-https://github.com/user-attachments/assets/b6386d0e-6c62-4477-9bd6-207b3649b596
+<img src="app-screenshot.png" width="100%">
 
 # :sparkles: Awesome Image Registration Dashboard :sparkles:
 
