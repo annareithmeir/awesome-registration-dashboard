@@ -27,7 +27,7 @@ A local web app for running and inspecting medical image registration: load a fi
 - **Save & export results.** Download the warped image, warped segmentation, or displacement field individually, or bundle all three into one `.zip` with a single click.
 
 ## :computer: Setup
-
+<!-- python version -->
 Requires Python 3.12+ and Node 18+.
 
 ### Backend
