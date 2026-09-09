@@ -1,4 +1,4 @@
-- add register with unigrad, choose sim (for multimodal), elastix
+- add register with unigrad, choose sim (for multimodal), elastix, and possibly others
 - add zoom
 - let user easily add own method
 - compare across different runs
