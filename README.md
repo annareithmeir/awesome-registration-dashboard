@@ -1,12 +1,15 @@
-<img src="demo_compressed.gif" alt="Awesome Image Registration Dashboard" width="50%">
+<video src="https://github.com/annareithmeir/awesome-registration-dashboard/blob/main/demo_2x.mp4"
+       controls
+       width="80%">
+</video>
 
-# Awesome Image Registration Dashboard
+# :sparkles: Awesome Image Registration Dashboard :sparkles:
 
 Run registrations or load already registered data and discover different evaluation metrics.
 
 A local web app for running and inspecting medical image registration: load a fixed/moving pair (2D or 3D NIfTI), register them with any of five methods, and drill into the result with per-structure overlap metrics, Jacobian/topology diagnostics, and a displacement-field visualizer — no notebook required.
 
-## Features
+## :eyes: Features
 
 - **Load anything, or start from a sample.** Upload fixed/moving images and segmentations (`.nii` / `.nii.gz`), or pick a bundled sample set to explore the app immediately — a synthetic 2D expand/shrink pair, plus optional real 2D/3D cardiac MRI and lung CT sets you can generate locally (see [Sample data](#sample-data)).
 - **Five registration methods, run in-browser:**
@@ -25,7 +28,7 @@ A local web app for running and inspecting medical image registration: load a fi
 - **Difference image** between fixed vs. moving or fixed vs. warped, to spot misregistration at a glance.
 - **Save & export results.** Download the warped image, warped segmentation, or displacement field individually, or bundle all three into one `.zip` with a single click.
 
-## Setup
+## :computer: Setup
 
 Requires Python 3.12+ and Node 18+.
 
@@ -46,7 +49,7 @@ cd frontend
 npm install
 ```
 
-## Run
+## :arrow_forward: Run
 
 Start the backend:
 
